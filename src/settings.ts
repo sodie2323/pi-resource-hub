@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
-import type { ResourceCategory, ResourceItem } from "./types.js";
+import type { FileResourceItem, ResourceCategory, ResourceItem } from "./types.js";
 
 interface PackageSourceFilter {
 	source: string;
@@ -14,6 +14,7 @@ interface PackageSourceFilter {
 export type PackageSource = string | PackageSourceFilter;
 
 export interface SettingsShape {
+	theme?: string;
 	packages?: PackageSource[];
 	extensions?: string[];
 	skills?: string[];
@@ -60,6 +61,13 @@ export function getPackageSources(settingsFile: SettingsFile | undefined): Packa
 	return settingsFile?.settings.packages ?? [];
 }
 
+export function getSelectedTheme(
+	projectSettings: SettingsFile | undefined,
+	userSettings: SettingsFile | undefined,
+): string | undefined {
+	return projectSettings?.settings.theme ?? userSettings?.settings.theme;
+}
+
 export function isPackageSourceEnabled(source: PackageSource): boolean {
 	if (typeof source === "string") return true;
 	return !(
@@ -81,6 +89,9 @@ export async function toggleResourceInSettings(cwd: string, item: ResourceItem):
 	if (item.category === "packages") {
 		togglePackage(settingsFile.settings, item.source, item.enabled);
 	} else {
+		if (item.category === "themes" || !("path" in item)) {
+			throw new Error(`Resource ${item.name} cannot be toggled via path settings`);
+		}
 		togglePathResource(settingsFile.settings, item.category, item, settingsFile.dir);
 	}
 
@@ -99,9 +110,29 @@ export async function removeResourceFromSettings(cwd: string, item: ResourceItem
 	if (item.category === "packages") {
 		removePackage(settingsFile.settings, item.source);
 	} else {
+		if (item.category === "themes" || !("path" in item)) {
+			throw new Error(`Resource ${item.name} cannot be removed via path settings`);
+		}
 		removePathResource(settingsFile.settings, item.category, item, settingsFile.dir);
 	}
 
+	await saveSettingsFile(settingsPath, settingsFile.settings);
+	return settingsPath;
+}
+
+export async function setActiveTheme(
+	cwd: string,
+	themeName: string,
+	scope: "project" | "user" = "project",
+): Promise<string> {
+	const settingsPath = scope === "project" ? getProjectSettingsPath(cwd) : getUserSettingsPath();
+	const settingsFile = (await readSettingsFile(settingsPath)) ?? {
+		path: settingsPath,
+		dir: dirname(settingsPath),
+		settings: {} as SettingsShape,
+	};
+
+	settingsFile.settings.theme = themeName;
 	await saveSettingsFile(settingsPath, settingsFile.settings);
 	return settingsPath;
 }
@@ -161,8 +192,8 @@ function togglePackage(settings: SettingsShape, source: string, enabled: boolean
 
 function togglePathResource(
 	settings: SettingsShape,
-	category: Exclude<ResourceCategory, "packages">,
-	item: Extract<ResourceItem, { path: string }>,
+	category: Exclude<ResourceCategory, "packages" | "themes">,
+	item: FileResourceItem,
 	settingsDir: string,
 ): void {
 	setPathResourceEnabled(settings, category, item.path, settingsDir, item.enabled);
@@ -177,8 +208,8 @@ function removePackage(settings: SettingsShape, source: string): void {
 
 function removePathResource(
 	settings: SettingsShape,
-	category: Exclude<ResourceCategory, "packages">,
-	item: Extract<ResourceItem, { path: string }>,
+	category: Exclude<ResourceCategory, "packages" | "themes">,
+	item: FileResourceItem,
 	settingsDir: string,
 ): void {
 	setPathResourceEnabled(settings, category, item.path, settingsDir, false);
@@ -186,7 +217,7 @@ function removePathResource(
 
 function setPathResourceEnabled(
 	settings: SettingsShape,
-	category: Exclude<ResourceCategory, "packages">,
+	category: Exclude<ResourceCategory, "packages" | "themes">,
 	path: string,
 	settingsDir: string,
 	enabled: boolean,

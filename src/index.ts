@@ -1,7 +1,7 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 import { ResourceBrowser } from "./browser.js";
 import { discoverResources } from "./discovery.js";
-import { addPackageToSettings, removeResourceFromSettings, toggleResourceInSettings } from "./settings.js";
+import { addPackageToSettings, removeResourceFromSettings, setActiveTheme, toggleResourceInSettings } from "./settings.js";
 import { isRemotePackageSource, type ResourceCategory, type ResourceItem } from "./types.js";
 
 const CATEGORIES: ResourceCategory[] = ["packages", "skills", "extensions", "prompts", "themes"];
@@ -234,9 +234,25 @@ async function handleMutateCommand(
 
 	const item = matches[0]!;
 	if (action === "remove") {
+		if (item.category === "themes" && !("path" in item)) {
+			ctx.ui.notify(`Built-in theme ${item.name} cannot be removed`, "warning");
+			return;
+		}
 		const settingsPath = await removeResourceFromSettings(ctx.cwd, item);
 		await refreshCompletionCache(ctx.cwd);
 		ctx.ui.notify(`${item.name} removed from ${settingsPath}. Run /reload to apply.`, "info");
+		return;
+	}
+
+	if (item.category === "themes") {
+		if (action === "disable") {
+			ctx.ui.notify("Themes cannot be disabled. Select another theme instead.", "warning");
+			return;
+		}
+		const settingsPath = await setActiveTheme(ctx.cwd, item.name, item.scope);
+		ctx.ui.setTheme(item.name);
+		await refreshCompletionCache(ctx.cwd);
+		ctx.ui.notify(`Applied theme ${item.name} via ${settingsPath}`, "info");
 		return;
 	}
 
@@ -348,18 +364,31 @@ async function openBrowser(category: ResourceCategory, ctx: ExtensionCommandCont
 		};
 		const toggleItem = async (item: ResourceItem) => {
 			try {
+				if (item.category === "themes") {
+					const settingsPath = await setActiveTheme(ctx.cwd, item.name, item.scope);
+					ctx.ui.setTheme(item.name);
+					await refreshBrowser();
+					setActionMessage("toggle", "info", `Applied theme ${item.name} (${settingsPath})`);
+					return;
+				}
 				const settingsPath = await toggleResourceInSettings(ctx.cwd, item);
 				hasPendingChanges = true;
 				await refreshBrowser();
 				setActionMessage("toggle", "info", `${item.enabled ? "Enabled" : "Disabled"} (${settingsPath})`);
 			} catch (error: unknown) {
-				item.enabled = !item.enabled;
+				if (item.category !== "themes") {
+					item.enabled = !item.enabled;
+				}
 				const message = error instanceof Error ? error.message : String(error);
 				setActionMessage("toggle", "error", `Failed: ${message}`);
 			}
 		};
 		const removeItem = async (item: ResourceItem) => {
 			try {
+				if (item.category === "themes" && !("path" in item)) {
+					setActionMessage("remove", "warning", `Built-in theme ${item.name} cannot be removed`);
+					return;
+				}
 				const settingsPath = await removeResourceFromSettings(ctx.cwd, item);
 				hasPendingChanges = true;
 				browser.removeItem(item);

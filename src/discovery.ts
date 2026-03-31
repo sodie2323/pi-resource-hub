@@ -4,6 +4,7 @@ import type { PackageSource, SettingsFile } from "./settings.js";
 import {
 	getPackageSources,
 	getProjectSettingsPath,
+	getSelectedTheme,
 	getSettingPaths,
 	getUserSettingsPath,
 	isPackageSourceEnabled,
@@ -18,6 +19,7 @@ import {
 	type ResourceIndex,
 	type ResourceItem,
 	type ResourceScope,
+	type ThemeResourceItem,
 } from "./types.js";
 
 interface DiscoveryContext {
@@ -53,6 +55,9 @@ async function discoverCategory(category: ResourceCategory, context: DiscoveryCo
 	if (category === "packages") {
 		return discoverPackages(context);
 	}
+	if (category === "themes") {
+		return discoverThemes(context);
+	}
 
 	const items = new Map<string, FileResourceItem>();
 	const projectBase = resolve(context.cwd, PROJECT_AGENT_DIR, category);
@@ -74,6 +79,39 @@ async function discoverCategory(category: ResourceCategory, context: DiscoveryCo
 	}
 	for (const path of getSettingPaths(context.userSettings, category)) {
 		const item = createFileItem(category, path, "user", "settings");
+		items.set(item.id, item);
+	}
+
+	return sortItems(Array.from(items.values()));
+}
+
+async function discoverThemes(context: DiscoveryContext): Promise<ResourceItem[]> {
+	const selectedTheme = getSelectedTheme(context.projectSettings, context.userSettings);
+	const items = new Map<string, ThemeResourceItem>();
+	const projectBase = resolve(context.cwd, PROJECT_AGENT_DIR, "themes");
+	const userBase = resolve(USER_AGENT_DIR, "themes");
+
+	for (const themeName of ["dark", "light"] as const) {
+		const item = createBuiltinThemeItem(themeName, selectedTheme);
+		items.set(item.id, item);
+	}
+
+	const [projectItems, userItems] = await Promise.all([
+		discoverThemeFiles(projectBase, "project", "convention", selectedTheme),
+		discoverThemeFiles(userBase, "user", "convention", selectedTheme),
+	]);
+	for (const item of projectItems) {
+		items.set(item.id, item);
+	}
+	for (const item of userItems) {
+		items.set(item.id, item);
+	}
+	for (const path of getSettingPaths(context.projectSettings, "themes")) {
+		const item = createThemeItem(path, "project", "settings", selectedTheme);
+		items.set(item.id, item);
+	}
+	for (const path of getSettingPaths(context.userSettings, "themes")) {
+		const item = createThemeItem(path, "user", "settings", selectedTheme);
 		items.set(item.id, item);
 	}
 
@@ -125,8 +163,8 @@ async function discoverPackageCounts(packageDir: string) {
 	const [extensions, skills, prompts, themes] = await Promise.all([
 		discoverConventionalResources("extensions", resolve(packageDir, "extensions"), "project", "package"),
 		discoverConventionalResources("skills", resolve(packageDir, "skills"), "project", "package"),
-		discoverConventionalResources("prompts", resolve(packageDir, "prompts"), "project", "package"),
-		discoverConventionalResources("themes", resolve(packageDir, "themes"), "project", "package"),
+		discoverFlatFiles(resolve(packageDir, "prompts"), "project", "package", "prompts", ".md"),
+		discoverThemeFiles(resolve(packageDir, "themes"), "project", "package", undefined),
 	]);
 
 	return {
@@ -138,7 +176,7 @@ async function discoverPackageCounts(packageDir: string) {
 }
 
 async function discoverConventionalResources(
-	category: Exclude<ResourceCategory, "packages">,
+	category: Exclude<ResourceCategory, "packages" | "themes">,
 	baseDir: string,
 	scope: ResourceScope,
 	source: string,
@@ -146,8 +184,23 @@ async function discoverConventionalResources(
 	try {
 		if (category === "extensions") return await discoverExtensions(baseDir, scope, source);
 		if (category === "skills") return await discoverSkills(baseDir, scope, source);
-		if (category === "prompts") return await discoverFlatFiles(baseDir, scope, source, category, ".md");
-		return await discoverFlatFiles(baseDir, scope, source, category, ".json");
+		return await discoverFlatFiles(baseDir, scope, source, category, ".md");
+	} catch {
+		return [];
+	}
+}
+
+async function discoverThemeFiles(
+	baseDir: string,
+	scope: ResourceScope,
+	source: string,
+	selectedTheme: string | undefined,
+): Promise<ThemeResourceItem[]> {
+	try {
+		const entries = await readdir(baseDir, { withFileTypes: true });
+		return entries
+			.filter((entry) => entry.isFile() && extname(entry.name) === ".json")
+			.map((entry) => createThemeItem(resolve(baseDir, entry.name), scope, source, selectedTheme));
 	} catch {
 		return [];
 	}
@@ -213,17 +266,21 @@ async function discoverFlatFiles(
 	baseDir: string,
 	scope: ResourceScope,
 	source: string,
-	category: "prompts" | "themes",
+	category: "prompts",
 	extension: string,
 ): Promise<FileResourceItem[]> {
-	const entries = await readdir(baseDir, { withFileTypes: true });
-	return entries
-		.filter((entry) => entry.isFile() && extname(entry.name) === extension)
-		.map((entry) => createFileItem(category, resolve(baseDir, entry.name), scope, source));
+	try {
+		const entries = await readdir(baseDir, { withFileTypes: true });
+		return entries
+			.filter((entry) => entry.isFile() && extname(entry.name) === extension)
+			.map((entry) => createFileItem(category, resolve(baseDir, entry.name), scope, source));
+	} catch {
+		return [];
+	}
 }
 
 function createFileItem(
-	category: Exclude<ResourceCategory, "packages">,
+	category: Exclude<ResourceCategory, "packages" | "themes">,
 	path: string,
 	scope: ResourceScope,
 	source: string,
@@ -242,9 +299,44 @@ function createFileItem(
 	};
 }
 
+function createThemeItem(
+	path: string,
+	scope: ResourceScope,
+	source: string,
+	selectedTheme: string | undefined,
+): ThemeResourceItem {
+	const name = inferName("themes", path);
+	return {
+		category: "themes",
+		id: `themes:${scope}:${path}`,
+		name,
+		path,
+		scope,
+		source,
+		description: buildResourceDescription("themes", scope, source, path),
+		enabled: name === selectedTheme,
+	};
+}
+
+function createBuiltinThemeItem(name: string, selectedTheme: string | undefined): ThemeResourceItem {
+	return {
+		category: "themes",
+		id: `themes:user:builtin:${name}`,
+		name,
+		scope: "user",
+		source: "builtin",
+		description: `Built-in Pi theme: ${name}`,
+		enabled: name === selectedTheme,
+		builtin: true,
+	};
+}
+
 function inferName(category: Exclude<ResourceCategory, "packages">, path: string): string {
 	if (category === "skills" && basename(path) === "SKILL.md") {
 		return basename(dirname(path));
+	}
+	if (category === "themes") {
+		return basename(path, extname(path));
 	}
 	return basename(path);
 }

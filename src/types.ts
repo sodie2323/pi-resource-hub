@@ -21,7 +21,7 @@ export interface PackageResourceItem {
 }
 
 export interface FileResourceItem {
-	category: Exclude<ResourceCategory, "packages">;
+	category: Exclude<ResourceCategory, "packages" | "themes">;
 	id: string;
 	name: string;
 	scope: ResourceScope;
@@ -31,7 +31,19 @@ export interface FileResourceItem {
 	enabled: boolean;
 }
 
-export type ResourceItem = PackageResourceItem | FileResourceItem;
+export interface ThemeResourceItem {
+	category: "themes";
+	id: string;
+	name: string;
+	scope: ResourceScope;
+	source: string;
+	description: string;
+	enabled: boolean;
+	path?: string;
+	builtin?: boolean;
+}
+
+export type ResourceItem = PackageResourceItem | FileResourceItem | ThemeResourceItem;
 
 export interface ResourceIndex {
 	categories: Record<ResourceCategory, ResourceItem[]>;

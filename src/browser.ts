@@ -119,7 +119,9 @@ export class ResourceBrowser implements Component, Focusable {
 		if (data === " ") {
 			const selected = this.filteredItems[this.selectedIndex];
 			if (selected) {
-				selected.enabled = !selected.enabled;
+				if (selected.category !== "themes") {
+					selected.enabled = !selected.enabled;
+				}
 				this.callbacks.onToggle?.(selected);
 			}
 			return;
@@ -274,7 +276,7 @@ export class ResourceBrowser implements Component, Focusable {
 
 	private renderFooter(width: number): string {
 		return truncateToWidth(
-			this.theme.fg("dim", "Left/Right switch tabs · Up/Down navigate · Space toggle · Enter inspect · A add · Esc close"),
+			this.theme.fg("dim", "Left/Right switch tabs · Up/Down navigate · Space toggle/apply · Enter inspect · A add · Esc close"),
 			width,
 			"…",
 		);
@@ -360,7 +362,9 @@ export class ResourceBrowser implements Component, Focusable {
 		}
 		switch (action) {
 			case "toggle":
-				this.detailItem.enabled = !this.detailItem.enabled;
+				if (this.detailItem.category !== "themes") {
+					this.detailItem.enabled = !this.detailItem.enabled;
+				}
 				this.callbacks.onToggle?.(this.detailItem);
 				return;
 			case "update":
@@ -373,7 +377,9 @@ export class ResourceBrowser implements Component, Focusable {
 	}
 
 	private getDetailActions(item: ResourceItem): DetailAction[] {
-		return item.category === "packages" ? ["toggle", "update", "remove", "back"] : ["toggle", "remove", "back"];
+		if (item.category === "packages") return ["toggle", "update", "remove", "back"];
+		if (item.category === "themes") return ["toggle", "back"];
+		return ["toggle", "remove", "back"];
 	}
 
 	private getPersistedActionHint(action: DetailAction): string | undefined {
@@ -395,6 +401,9 @@ export class ResourceBrowser implements Component, Focusable {
 	private getDetailActionHint(action: DetailAction, item: ResourceItem): string | undefined {
 		switch (action) {
 			case "toggle":
+				if (item.category === "themes") {
+					return item.enabled ? this.theme.fg("success", "Currently active") : this.theme.fg("dim", "Enter to apply theme");
+				}
 				return this.theme.fg("dim", item.enabled ? "Enter to disable" : "Enter to enable");
 			case "update":
 				if (item.category !== "packages") return undefined;
@@ -418,6 +427,9 @@ export class ResourceBrowser implements Component, Focusable {
 	private getDetailActionLabel(action: DetailAction, item: ResourceItem, selected: boolean): string {
 		switch (action) {
 			case "toggle":
+				if (item.category === "themes") {
+					return item.enabled ? this.theme.fg("success", "Active") : this.theme.fg("accent", "Apply");
+				}
 				return item.enabled ? this.theme.fg("warning", "Disable") : this.theme.fg("success", "Enable");
 			case "update":
 				return "Update";
