@@ -400,29 +400,12 @@ async function openBrowser(category: ResourceCategory, ctx: ExtensionCommandCont
 				setActionMessage("remove", "error", `Failed: ${message}`);
 			}
 		};
-		const addItem = async () => {
-			try {
-				const source = (await ctx.ui.input("Add package", "Enter a package source (npm:, git:, url, or local path)"))?.trim();
-				if (!source) return;
-				const scope = await ctx.ui.select("Add package", ["project", "user"]);
-				if (!scope) return;
-				const settingsPath = await addPackageToSettings(ctx.cwd, source, scope === "user" ? "user" : "project");
-				hasPendingChanges = true;
-				await refreshBrowser();
-				ctx.ui.notify(`Added package to ${settingsPath}`, "info");
-			} catch (error: unknown) {
-				const message = error instanceof Error ? error.message : String(error);
-				ctx.ui.notify(`Failed to add package: ${message}`, "error");
-			}
-		};
-
 		browser = new ResourceBrowser(theme, resources, category, {
 			onClose: closeBrowser,
 			onInspect: undefined,
 			onToggle: (item) => void toggleItem(item),
 			onUpdate: (item) => void updatePackage(item),
 			onRemove: (item) => void removeItem(item),
-			onAdd: () => void addItem(),
 		});
 		return {
 			render: (width) => browser.render(width),

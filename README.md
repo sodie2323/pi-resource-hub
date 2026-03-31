@@ -121,8 +121,7 @@ Examples:
 - `Up/Down` — move selection
 - `PageUp/PageDown` — jump through the list
 - `Enter` — open resource details
-- `Space` — enable/disable selected resource
-- `A` — add a package source
+- `Space` — enable/disable or apply selected resource
 - `Esc` — close or go back
 
 ### Detail view

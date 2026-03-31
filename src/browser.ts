@@ -29,7 +29,6 @@ interface BrowserCallbacks {
 	onToggle?: (item: ResourceItem) => void;
 	onUpdate?: (item: ResourceItem) => void;
 	onRemove?: (item: ResourceItem) => void;
-	onAdd?: () => void;
 }
 
 export class ResourceBrowser implements Component, Focusable {
@@ -82,10 +81,6 @@ export class ResourceBrowser implements Component, Focusable {
 
 		if (kb.matches(data, "tui.select.cancel")) {
 			this.callbacks.onClose();
-			return;
-		}
-		if (data === "a") {
-			this.callbacks.onAdd?.();
 			return;
 		}
 		if (kb.matches(data, "tui.editor.cursorLeft")) {
@@ -276,7 +271,7 @@ export class ResourceBrowser implements Component, Focusable {
 
 	private renderFooter(width: number): string {
 		return truncateToWidth(
-			this.theme.fg("dim", "Left/Right switch tabs · Up/Down navigate · Space toggle/apply · Enter inspect · A add · Esc close"),
+			this.theme.fg("dim", "Left/Right switch tabs · Up/Down navigate · Space toggle/apply · Enter inspect · Esc close"),
 			width,
 			"…",
 		);
