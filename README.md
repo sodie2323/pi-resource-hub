@@ -1,8 +1,9 @@
 # pi-resource-center
 
-[![Version](https://img.shields.io/badge/version-0.1.1-blue.svg)](https://github.com/sodie2323/pi-resource-hub/releases)
+[![npm version](https://img.shields.io/npm/v/pi-resource-center.svg)](https://www.npmjs.com/package/pi-resource-center)
+[![Version](https://img.shields.io/badge/version-0.1.1-blue.svg)](https://github.com/sodie2323/pi-resource-center/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
-[![Pi Package](https://img.shields.io/badge/pi-package-purple.svg)](https://github.com/sodie2323/pi-resource-hub)
+[![Pi Package](https://img.shields.io/badge/pi-package-purple.svg)](https://github.com/sodie2323/pi-resource-center)
 
 A `pi-package` for [Pi](https://github.com/mariozechner/pi-coding-agent) that adds a `/resource` command for browsing, discovering, and managing:
 
@@ -47,7 +48,7 @@ pi install npm:pi-resource-center
 ### Install from GitHub
 
 ```bash
-pi install https://github.com/sodie2323/pi-resource-hub
+pi install https://github.com/sodie2323/pi-resource-center
 ```
 
 ### Install from a local path
@@ -277,7 +278,7 @@ pi install npm:pi-resource-center
 ## Notes
 
 - The npm package name is `pi-resource-center`
-- The repository is hosted at `sodie2323/pi-resource-hub`
+- The repository is hosted at `sodie2323/pi-resource-center`
 - The `/resource` browser defaults to the `packages` category
 
 ## License

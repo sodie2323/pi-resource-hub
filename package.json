@@ -7,11 +7,11 @@
 	"keywords": ["pi-package", "pi", "tui", "extensions", "themes", "resources"],
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/sodie2323/pi-resource-hub.git"
+		"url": "git+https://github.com/sodie2323/pi-resource-center.git"
 	},
-	"homepage": "https://github.com/sodie2323/pi-resource-hub#readme",
+	"homepage": "https://github.com/sodie2323/pi-resource-center#readme",
 	"bugs": {
-		"url": "https://github.com/sodie2323/pi-resource-hub/issues"
+		"url": "https://github.com/sodie2323/pi-resource-center/issues"
 	},
 	"pi": {
 		"extensions": ["./extensions"]
