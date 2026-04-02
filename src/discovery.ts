@@ -6,7 +6,7 @@ import {
 	type ResolvedPaths,
 	type ResolvedResource,
 } from "@mariozechner/pi-coding-agent";
-import { isPackageSourceEnabled, type PackageSource, USER_AGENT_DIR } from "./settings.js";
+import { getExposedResources, isPackageSourceEnabled, type PackageSource, USER_AGENT_DIR } from "./settings.js";
 import type {
 	FileResourceItem,
 	PackageResourceCounts,
@@ -27,15 +27,16 @@ export async function discoverResources(cwd: string): Promise<ResourceIndex> {
 	const userSettings = settingsManager.getGlobalSettings();
 	const selectedTheme = projectSettings.theme ?? userSettings.theme;
 	const packageCounts = buildPackageCountMap(resolvedPaths);
+	const exposedResources = await getExposedResources(cwd);
 
 	const categories: ResourceIndex["categories"] = {
 		packages: sortItems([
 			...buildPackageItems((projectSettings.packages ?? []) as PackageSource[], "project", packageCounts),
 			...buildPackageItems((userSettings.packages ?? []) as PackageSource[], "user", packageCounts),
 		]),
-		skills: mapResolvedResources("skills", resolvedPaths.skills),
-		extensions: mapResolvedResources("extensions", resolvedPaths.extensions),
-		prompts: mapResolvedResources("prompts", resolvedPaths.prompts),
+		skills: mapResolvedResources("skills", resolvedPaths.skills, exposedResources),
+		extensions: mapResolvedResources("extensions", resolvedPaths.extensions, exposedResources),
+		prompts: mapResolvedResources("prompts", resolvedPaths.prompts, exposedResources),
 		themes: buildThemeItems(resolvedPaths.themes, selectedTheme),
 	};
 
@@ -71,11 +72,12 @@ function buildPackageItems(
 function mapResolvedResources<TCategory extends Exclude<ResourceCategory, "packages" | "themes">>(
 	category: TCategory,
 	resources: ResolvedResource[],
+	exposedResources: Array<{ scope: ResourceScope; category: Exclude<ResourceCategory, "packages" | "themes">; package: string; path: string }>,
 ): FileResourceItem[] {
 	return sortItems(
 		resources
 			.filter((resource) => isSupportedScope(resource.metadata.scope))
-			.map((resource) => createFileItem(category, resource)),
+			.map((resource) => createFileItem(category, resource, exposedResources)),
 	);
 }
 
@@ -103,12 +105,15 @@ function buildThemeItems(resources: ResolvedResource[], selectedTheme: string | 
 function createFileItem(
 	category: Exclude<ResourceCategory, "packages" | "themes">,
 	resource: ResolvedResource,
+	exposedResources: Array<{ scope: ResourceScope; category: Exclude<ResourceCategory, "packages" | "themes">; package: string; path: string }>,
 ): FileResourceItem {
 	const scope = resource.metadata.scope;
 	if (!isSupportedScope(scope)) {
 		throw new Error(`Unsupported resource scope: ${scope}`);
 	}
 
+	const packageSource = resource.metadata.origin === "package" ? resource.metadata.source : undefined;
+	const packageRelativePath = getRelativeResourcePath(resource);
 	return {
 		category,
 		id: `${category}:${scope}:${resource.metadata.origin}:${resource.metadata.source}:${resource.path}`,
@@ -118,8 +123,19 @@ function createFileItem(
 		source: normalizeSource(resource.metadata),
 		description: buildResourceDescription(category, scope, resource.metadata, resource.path),
 		enabled: resource.enabled,
-		packageSource: resource.metadata.origin === "package" ? resource.metadata.source : undefined,
-		packageRelativePath: getRelativeResourcePath(resource),
+		packageSource,
+		packageRelativePath,
+		exposed: Boolean(
+			packageSource &&
+			packageRelativePath &&
+			exposedResources.some(
+				(entry) =>
+					entry.scope === scope &&
+					entry.category === category &&
+					entry.package === packageSource &&
+					normalizeConfigPath(entry.path) === normalizeConfigPath(packageRelativePath),
+			),
+		),
 	};
 }
 
@@ -166,6 +182,10 @@ function getRelativeResourcePath(resource: ResolvedResource): string | undefined
 
 function toPackageKey(scope: ResourceScope, source: string): string {
 	return `${scope}:${source}`;
+}
+
+function normalizeConfigPath(value: string): string {
+	return value.replace(/^[+\-!]/, "").replace(/\\/g, "/");
 }
 
 function normalizeSource(metadata: PathMetadata): string {

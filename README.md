@@ -19,7 +19,7 @@ It provides a keyboard-driven TUI resource browser, resource discovery across pr
 - Unified browser for major Pi resource types
 - Fast search and keyboard navigation
 - Discovery from project settings, user settings, conventional folders, and package sources
-- Enable/disable resources from the browser or command line
+- Enable/disable top-level resources and package-contained resources from the browser or command line
 - Apply built-in and custom themes from the browser or command line
 - Remove configured resources from settings
 - Add package sources via `/resource add ...`
@@ -103,12 +103,14 @@ Examples:
 /resource add ../local-pi-package project
 ```
 
-### Enable, disable, or remove resources
+### Enable, disable, remove, expose, or hide resources
 
 ```bash
 /resource enable [category] <name-or-source>
 /resource disable [category] <name-or-source>
 /resource remove [category] <name-or-source>
+/resource expose [category] <name-or-source>
+/resource hide [category] <name-or-source>
 ```
 
 Supported category aliases:
@@ -125,7 +127,15 @@ Examples:
 /resource disable package npm:@scope/some-pi-package
 /resource enable extension resource-center/index.ts
 /resource remove theme my-theme
+/resource expose prompt prompts/review.md
+/resource hide extension my-package/index.ts
 ```
+
+Package-contained resources can also be toggled. These are matched by name, source, path, and package-relative path when available.
+
+`/resource expose` and `/resource hide` apply to package-contained extensions, skills, and prompts only.
+
+Their argument completion is scoped to package-contained resources, so exposing common package assets is easier from the command line.
 
 ## Theme behavior
 
@@ -157,11 +167,17 @@ Examples:
 - `Space` — enable/disable or apply the selected item
 - `Esc` — close or go back
 
+Items from local packages may show a package marker and package-relative path in the list and detail view.
+
 ### Detail view
 
 - `Up/Down` — choose an action
 - `Enter` — confirm action
 - `Esc` — return to the list
+
+For packages, the detail view includes a **Manage Resources** action that opens contained extensions, skills, prompts, and themes for that package.
+
+For package-contained extensions, skills, and prompts, the detail view also includes a **Show in Category** / **Hide from Category** action.
 
 ## Discovery model
 
@@ -193,6 +209,12 @@ Configured package sources are read from Pi settings. For local package sources,
 - skills
 - prompts
 - themes
+
+By default, `extensions`, `skills`, and `prompts` focus on top-level resources. Package-contained resources for those categories are managed from the package detail view instead.
+
+From a package-contained extension, skill, or prompt detail view, you can explicitly show or hide that resource in its top-level category. Exposed package resources keep a package marker so their origin stays visible.
+
+Themes are the exception: package-provided themes are still surfaced in the `themes` category by default so they remain easy to discover and apply.
 
 Supported remote source prefixes:
 

@@ -1,7 +1,7 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 import { ResourceBrowser } from "./browser.js";
 import { discoverResources } from "./discovery.js";
-import { addPackageToSettings, removeResourceFromSettings, setActiveTheme, toggleResourceInSettings } from "./settings.js";
+import { addPackageToSettings, removeResourceFromSettings, setActiveTheme, setResourceExposed, toggleResourceInSettings } from "./settings.js";
 import { isRemotePackageSource, type ResourceCategory, type ResourceItem } from "./types.js";
 
 const CATEGORIES: ResourceCategory[] = ["packages", "skills", "extensions", "prompts", "themes"];
@@ -10,6 +10,8 @@ const ROOT_COMPLETIONS = [
 	{ value: "remove", description: "Remove a resource or package from settings" },
 	{ value: "enable", description: "Enable a resource or package in settings" },
 	{ value: "disable", description: "Disable a resource or package in settings" },
+	{ value: "expose", description: "Show a package-contained resource in its top-level category" },
+	{ value: "hide", description: "Hide a package-contained resource from its top-level category" },
 	{ value: "sync", description: "Rediscover resources and report the current count" },
 	{ value: "packages", description: "Open the packages browser" },
 	{ value: "skills", description: "Open the skills browser" },
@@ -27,6 +29,12 @@ const MUTATION_CATEGORY_COMPLETIONS = [
 	{ value: "extension", description: "Match an extension by name, source, or path" },
 	{ value: "prompt", description: "Match a prompt by name, source, or path" },
 	{ value: "theme", description: "Match a theme by name, source, or path" },
+] as const;
+
+const EXPOSURE_CATEGORY_COMPLETIONS = [
+	{ value: "skill", description: "Match a package-contained skill by name, source, or path" },
+	{ value: "extension", description: "Match a package-contained extension by name, source, or path" },
+	{ value: "prompt", description: "Match a package-contained prompt by name, source, or path" },
 ] as const;
 const CATEGORY_ALIAS_MAP: Record<string, ResourceCategory> = {
 	package: "packages",
@@ -47,6 +55,12 @@ let resourceCompletionCache: Record<ResourceCategory, string[]> = {
 	extensions: [],
 	prompts: [],
 	themes: [],
+};
+
+let exposureCompletionCache: Record<Exclude<ResourceCategory, "packages" | "themes">, string[]> = {
+	skills: [],
+	extensions: [],
+	prompts: [],
 };
 
 export default function resourceCenter(pi: ExtensionAPI) {
@@ -102,6 +116,16 @@ async function handleResourceCommand(args: string, ctx: ExtensionCommandContext,
 		return;
 	}
 
+	if (subcommand === "expose") {
+		await handleExposureCommand("expose", sliceCommandArgs(args, subcommand), ctx);
+		return;
+	}
+
+	if (subcommand === "hide") {
+		await handleExposureCommand("hide", sliceCommandArgs(args, subcommand), ctx);
+		return;
+	}
+
 	ctx.ui.notify(`Unknown /resource subcommand: ${subcommand}`, "warning");
 }
 
@@ -139,6 +163,18 @@ function getResourceArgumentCompletions(prefix: string) {
 		return buildCompletionItems(resourceCompletionCache[category], current);
 	}
 
+	if (["expose", "hide"].includes(command)) {
+		if (parts.length === 1 || (parts.length === 2 && !endsWithSpace)) {
+			const current = endsWithSpace ? "" : (parts[parts.length - 1] ?? "");
+			return buildCompletionItems(EXPOSURE_CATEGORY_COMPLETIONS, current);
+		}
+
+		const category = normalizeCategoryAlias(parts[1]!);
+		if (category === "packages" || category === "themes") return null;
+		const current = endsWithSpace ? "" : (parts[parts.length - 1] ?? "");
+		return buildCompletionItems(exposureCompletionCache[category], current);
+	}
+
 	return null;
 }
 
@@ -174,6 +210,11 @@ async function refreshCompletionCache(cwd: string): Promise<void> {
 		extensions: uniqueCompletionValues(resources.categories.extensions),
 		prompts: uniqueCompletionValues(resources.categories.prompts),
 		themes: uniqueCompletionValues(resources.categories.themes),
+	};
+	exposureCompletionCache = {
+		skills: uniqueCompletionValues(resources.categories.skills.filter((item) => item.packageSource)),
+		extensions: uniqueCompletionValues(resources.categories.extensions.filter((item) => item.packageSource)),
+		prompts: uniqueCompletionValues(resources.categories.prompts.filter((item) => item.packageSource)),
 	};
 }
 
@@ -242,7 +283,7 @@ async function handleMutateCommand(
 	const item = matches[0]!;
 	if (action === "remove") {
 		if (item.packageSource) {
-			ctx.ui.notify(`Package resources cannot be removed individually`, "warning");
+			ctx.ui.notify(`Package-contained resources cannot be removed individually. Disable them instead.`, "warning");
 			return;
 		}
 		if (item.category === "themes" && !("path" in item)) {
@@ -256,6 +297,13 @@ async function handleMutateCommand(
 	}
 
 	if (item.category === "themes") {
+		if (item.packageSource && action === "disable") {
+			item.enabled = false;
+			const settingsPath = await toggleResourceInSettings(ctx.cwd, item);
+			await refreshCompletionCache(ctx.cwd);
+			await reloadAfterSettingsChange(ctx, `${item.name}: disabled in ${settingsPath}`);
+			return;
+		}
 		if (action === "disable") {
 			ctx.ui.notify("Themes cannot be disabled. Select another theme instead.", "warning");
 			return;
@@ -271,6 +319,52 @@ async function handleMutateCommand(
 	const settingsPath = await toggleResourceInSettings(ctx.cwd, item);
 	await refreshCompletionCache(ctx.cwd);
 	await reloadAfterSettingsChange(ctx, `${item.name}: ${action}d in ${settingsPath}`);
+}
+
+async function handleExposureCommand(
+	action: "expose" | "hide",
+	args: string,
+	ctx: ExtensionCommandContext,
+): Promise<void> {
+	const parts = args.split(/\s+/).filter(Boolean);
+	if (parts.length === 0) {
+		ctx.ui.notify(`Usage: /resource ${action} [category] <name-or-source>`, "info");
+		return;
+	}
+
+	let category: ResourceCategory | undefined;
+	let query = args.trim();
+	if (isCategoryAlias(parts[0]!)) {
+		category = normalizeCategoryAlias(parts[0]!);
+		query = args.trim().slice(parts[0]!.length).trim();
+	}
+	if (!query) {
+		ctx.ui.notify(`Usage: /resource ${action} [category] <name-or-source>`, "info");
+		return;
+	}
+
+	const resources = await discoverResources(ctx.cwd);
+	const matches = findResources(resources, query, category);
+	if (matches.length === 0) {
+		ctx.ui.notify(`No resource matched: ${query}`, "warning");
+		return;
+	}
+	if (matches.length > 1) {
+		const list = matches.slice(0, 5).map((item) => `${item.category}: ${item.name}`).join(", ");
+		ctx.ui.notify(`Multiple resources matched: ${list}`, "warning");
+		return;
+	}
+
+	const item = matches[0]!;
+	if (!item.packageSource || item.category === "packages" || item.category === "themes") {
+		ctx.ui.notify("Only package-contained extensions, skills, and prompts can be shown or hidden in category views", "warning");
+		return;
+	}
+
+	const exposed = action === "expose";
+	const statePath = await setResourceExposed(ctx.cwd, item, exposed);
+	await refreshCompletionCache(ctx.cwd);
+	ctx.ui.notify(`${item.name}: ${exposed ? "shown in" : "hidden from"} category view via ${statePath}`, "info");
 }
 
 async function reloadAfterSettingsChange(ctx: ExtensionCommandContext, message: string): Promise<void> {
@@ -325,7 +419,7 @@ async function openBrowser(category: ResourceCategory, ctx: ExtensionCommandCont
 			}
 			browser.stopActionLoading("update");
 		};
-		const setActionMessage = (action: "toggle" | "update" | "remove", type: "info" | "warning" | "error", text: string) => {
+		const setActionMessage = (action: "toggle" | "expose" | "update" | "remove", type: "info" | "warning" | "error", text: string) => {
 			browser.setActionMessage(action, type, text);
 			requestRender();
 		};
@@ -406,10 +500,21 @@ async function openBrowser(category: ResourceCategory, ctx: ExtensionCommandCont
 				setActionMessage("toggle", "error", `Failed: ${message}`);
 			}
 		};
+		const exposeItem = async (item: ResourceItem) => {
+			try {
+				const statePath = await setResourceExposed(ctx.cwd, item, Boolean(item.exposed));
+				await refreshBrowser();
+				setActionMessage("expose", "info", `${item.exposed ? "Shown in" : "Hidden from"} category view (${statePath})`);
+			} catch (error: unknown) {
+				item.exposed = !item.exposed;
+				const message = error instanceof Error ? error.message : String(error);
+				setActionMessage("expose", "error", `Failed: ${message}`);
+			}
+		};
 		const removeItem = async (item: ResourceItem) => {
 			try {
 				if (item.packageSource) {
-					setActionMessage("remove", "warning", "Package resources cannot be removed individually");
+					setActionMessage("remove", "warning", "Package-contained resources cannot be removed individually. Disable them instead.");
 					return;
 				}
 				if (item.category === "themes" && !("path" in item)) {
@@ -431,6 +536,7 @@ async function openBrowser(category: ResourceCategory, ctx: ExtensionCommandCont
 			onClose: closeBrowser,
 			onInspect: undefined,
 			onToggle: (item) => void toggleItem(item),
+			onExpose: (item) => void exposeItem(item),
 			onUpdate: (item) => void updatePackage(item),
 			onRemove: (item) => void removeItem(item),
 		});

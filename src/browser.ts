@@ -20,13 +20,15 @@ const CATEGORY_LABELS: Record<ResourceCategory, string> = {
 	themes: "Themes",
 };
 
-type BrowserMode = "list" | "detail";
-type DetailAction = "toggle" | "update" | "remove" | "back";
+type BrowserMode = "list" | "detail" | "packageGroups" | "packageItems";
+type DetailAction = "manage" | "toggle" | "expose" | "update" | "remove" | "back";
+type PackageContentCategory = Exclude<ResourceCategory, "packages">;
 
 interface BrowserCallbacks {
 	onClose: () => void | Promise<void>;
 	onInspect?: (item: ResourceItem) => void;
 	onToggle?: (item: ResourceItem) => void;
+	onExpose?: (item: ResourceItem) => void;
 	onUpdate?: (item: ResourceItem) => void;
 	onRemove?: (item: ResourceItem) => void;
 }
@@ -43,6 +45,12 @@ export class ResourceBrowser implements Component, Focusable {
 	private mode: BrowserMode = "list";
 	private detailItem: ResourceItem | undefined;
 	private detailSelectedIndex = 0;
+	private detailReturnMode: Exclude<BrowserMode, "detail"> = "list";
+	private packageItem: ResourceItem | undefined;
+	private packageCategoryIndex = 0;
+	private packageContentsCategory: PackageContentCategory = "extensions";
+	private packageContentsItems: ResourceItem[] = [];
+	private packageContentsSelectedIndex = 0;
 	private confirmingRemove = false;
 	private actionMessage: { action: DetailAction; type: "info" | "warning" | "error"; text: string } | undefined;
 	private loadingAction: DetailAction | undefined;
@@ -76,6 +84,14 @@ export class ResourceBrowser implements Component, Focusable {
 		const kb = getKeybindings();
 		if (this.mode === "detail") {
 			this.handleDetailInput(data);
+			return;
+		}
+		if (this.mode === "packageGroups") {
+			this.handlePackageGroupsInput(data);
+			return;
+		}
+		if (this.mode === "packageItems") {
+			this.handlePackageItemsInput(data);
 			return;
 		}
 
@@ -138,6 +154,20 @@ export class ResourceBrowser implements Component, Focusable {
 			lines.push(...this.wrapBlock([this.renderDetailFooter(innerWidth)], width));
 			return lines;
 		}
+		if (this.mode === "packageGroups") {
+			lines.push("");
+			lines.push(...this.wrapBlock(this.renderPackageGroupsPage(innerWidth), width));
+			lines.push("");
+			lines.push(...this.wrapBlock([this.renderPackageFooter(innerWidth)], width));
+			return lines;
+		}
+		if (this.mode === "packageItems") {
+			lines.push("");
+			lines.push(...this.wrapBlock(this.renderPackageItemsPage(innerWidth), width));
+			lines.push("");
+			lines.push(...this.wrapBlock([this.renderPackageFooter(innerWidth)], width));
+			return lines;
+		}
 		lines.push(...this.wrapBlock(this.renderTabs(innerWidth), width));
 		lines.push("");
 		lines.push(...this.wrapBlock(this.renderSearch(innerWidth), width));
@@ -149,8 +179,14 @@ export class ResourceBrowser implements Component, Focusable {
 	}
 
 	private renderHeader(width: number): string[] {
+		const count =
+			this.mode === "packageItems"
+				? this.packageContentsItems.length
+				: this.mode === "packageGroups"
+					? this.getPackageCategories().length
+					: this.filteredItems.length;
 		const left = this.theme.fg("accent", this.theme.bold("Resources:"));
-		const right = this.theme.fg("muted", `${this.filteredItems.length} item(s)`);
+		const right = this.theme.fg("muted", `${count} item(s)`);
 		const spacing = Math.max(1, width - visibleWidth(left) - visibleWidth(right));
 		return [truncateToWidth(`${left}${" ".repeat(spacing)}${right}`, width, "")];
 	}
@@ -193,9 +229,12 @@ export class ResourceBrowser implements Component, Focusable {
 			const toggle = item.enabled
 				? this.theme.fg("success", this.theme.bold("[on]"))
 				: this.theme.fg("dim", this.theme.bold("[off]"));
-			const name = selected ? this.theme.bold(item.name) : this.theme.fg("text", item.name);
+			const packageBadge = item.packageSource ? this.theme.fg("accent", this.theme.bold("[pkg] ")) : "";
+			const nameText = `${packageBadge}${item.name}`;
+			const name = selected ? this.theme.bold(nameText) : this.theme.fg("text", nameText);
 			const scope = item.scope === "project" ? this.theme.fg("success", "project") : this.theme.fg("warning", "user");
-			const source = this.theme.fg("dim", item.source);
+			const sourceText = item.packageRelativePath ? `${item.source} · ${item.packageRelativePath}` : item.source;
+			const source = this.theme.fg("dim", sourceText);
 			const left = `${marker} ${toggle} ${name}`;
 			const right = `${scope}  ${source}`;
 			const spacing = Math.max(1, width - visibleWidth(left) - visibleWidth(right));
@@ -239,6 +278,12 @@ export class ResourceBrowser implements Component, Focusable {
 			truncateToWidth(`${this.theme.fg("muted", "Source")}: ${item.source}`, width, "…"),
 			truncateToWidth(`${this.theme.fg("muted", "Value")}: ${"path" in item ? item.path : item.name}`, width, "…"),
 		];
+		if (item.packageSource) {
+			lines.push(truncateToWidth(`${this.theme.fg("muted", "Package")}: ${item.packageSource}`, width, "…"));
+		}
+		if (item.packageRelativePath) {
+			lines.push(truncateToWidth(`${this.theme.fg("muted", "Package Path")}: ${item.packageRelativePath}`, width, "…"));
+		}
 		if (item.category === "packages") {
 			const counts = this.formatPackageCounts(item, true);
 			if (counts) {
@@ -269,6 +314,60 @@ export class ResourceBrowser implements Component, Focusable {
 		return lines;
 	}
 
+	private renderPackageGroupsPage(width: number): string[] {
+		const pkg = this.packageItem;
+		if (!pkg || pkg.category !== "packages") return [this.theme.fg("muted", "No package selected")];
+		const title = this.theme.fg("accent", this.theme.bold(`Package Resources: ${pkg.name}`));
+		const hint = this.theme.fg("dim", "Esc to go back");
+		const spacing = Math.max(1, width - visibleWidth(title) - visibleWidth(hint));
+		const lines = [truncateToWidth(`${title}${" ".repeat(spacing)}${hint}`, width, "…"), ""];
+
+		for (const [index, category] of this.getPackageCategories().entries()) {
+			const items = this.getPackageContainedItems(pkg, category);
+			const selected = index === this.packageCategoryIndex;
+			let line = `${selected ? this.theme.fg("accent", "› ") : "  "}${CATEGORY_LABELS[category]} (${items.length})`;
+			line = truncateToWidth(line, width, "…");
+			if (selected) line = this.theme.bg("selectedBg", line);
+			lines.push(line);
+		}
+
+		return lines;
+	}
+
+	private renderPackageItemsPage(width: number): string[] {
+		const pkg = this.packageItem;
+		if (!pkg || pkg.category !== "packages") return [this.theme.fg("muted", "No package selected")];
+		const title = this.theme.fg("accent", this.theme.bold(`${pkg.name} · ${CATEGORY_LABELS[this.packageContentsCategory]}`));
+		const hint = this.theme.fg("dim", "Esc to go back");
+		const spacing = Math.max(1, width - visibleWidth(title) - visibleWidth(hint));
+		const lines = [truncateToWidth(`${title}${" ".repeat(spacing)}${hint}`, width, "…"), ""];
+		if (this.packageContentsItems.length === 0) {
+			lines.push(this.theme.fg("muted", "No package resources found"));
+			return lines;
+		}
+
+		for (let index = 0; index < this.packageContentsItems.length; index++) {
+			const item = this.packageContentsItems[index]!;
+			const selected = index === this.packageContentsSelectedIndex;
+			const marker = selected ? this.theme.fg("accent", "▌") : this.theme.fg("dim", " ");
+			const toggle = item.enabled
+				? this.theme.fg("success", this.theme.bold("[on]"))
+				: this.theme.fg("dim", this.theme.bold("[off]"));
+			const exposure = item.packageSource && item.category !== "themes"
+				? item.exposed
+					? this.theme.fg("accent", this.theme.bold("[shown]"))
+					: this.theme.fg("dim", "[hidden]")
+				: "";
+			const label = item.packageRelativePath ?? ("path" in item ? item.path : item.name);
+			let line = truncateToWidth(`${marker} ${toggle} ${item.name} ${exposure}${exposure ? " " : ""}${this.theme.fg("dim", `· ${label}`)}`, width, "…");
+			if (selected) line = this.theme.bg("selectedBg", line);
+			else line = this.theme.fg("text", line);
+			lines.push(line);
+		}
+
+		return lines;
+	}
+
 	private renderFooter(width: number): string {
 		return truncateToWidth(
 			this.theme.fg("dim", "Left/Right switch tabs · Up/Down navigate · Space toggle/apply · Enter inspect · Esc close"),
@@ -279,6 +378,10 @@ export class ResourceBrowser implements Component, Focusable {
 
 	private renderDetailFooter(width: number): string {
 		return truncateToWidth(this.theme.fg("dim", "Up/Down choose action · Enter confirm · Esc back"), width, "…");
+	}
+
+	private renderPackageFooter(width: number): string {
+		return truncateToWidth(this.theme.fg("dim", "Up/Down navigate · Enter inspect/open · Space toggle/apply · Esc back"), width, "…");
 	}
 
 	private renderDescriptionBlock(text: string, width: number): string[] {
@@ -348,19 +451,24 @@ export class ResourceBrowser implements Component, Focusable {
 			this.callbacks.onRemove?.(this.detailItem);
 			return;
 		}
-		if (
-			action === "update" &&
-			this.detailItem.category === "packages" &&
-			!this.supportsPackageUpdate(this.detailItem)
-		) {
+		if (action === "update" && this.detailItem.category === "packages" && !this.supportsPackageUpdate(this.detailItem)) {
 			return;
 		}
 		switch (action) {
+			case "manage":
+				if (this.detailItem.category === "packages") {
+					this.openPackageGroups(this.detailItem);
+				}
+				return;
 			case "toggle":
 				if (this.detailItem.category !== "themes") {
 					this.detailItem.enabled = !this.detailItem.enabled;
 				}
 				this.callbacks.onToggle?.(this.detailItem);
+				return;
+			case "expose":
+				this.detailItem.exposed = !this.detailItem.exposed;
+				this.callbacks.onExpose?.(this.detailItem);
 				return;
 			case "update":
 				this.callbacks.onUpdate?.(this.detailItem);
@@ -368,11 +476,69 @@ export class ResourceBrowser implements Component, Focusable {
 			case "back":
 				this.exitDetailMode();
 				return;
+			case "remove":
+				return;
+		}
+	}
+
+	private handlePackageGroupsInput(data: string): void {
+		const kb = getKeybindings();
+		if (kb.matches(data, "tui.select.cancel")) {
+			if (this.packageItem) {
+				this.openDetailItem(this.packageItem, "list");
+			} else {
+				this.mode = "list";
+			}
+			return;
+		}
+		const categories = this.getPackageCategories();
+		if (kb.matches(data, "tui.select.up")) {
+			this.packageCategoryIndex = Math.max(0, this.packageCategoryIndex - 1);
+			return;
+		}
+		if (kb.matches(data, "tui.select.down")) {
+			this.packageCategoryIndex = Math.min(categories.length - 1, this.packageCategoryIndex + 1);
+			return;
+		}
+		if (!kb.matches(data, "tui.select.confirm") || !this.packageItem || this.packageItem.category !== "packages") return;
+		this.packageContentsCategory = categories[this.packageCategoryIndex]!;
+		this.packageContentsItems = this.getPackageContainedItems(this.packageItem, this.packageContentsCategory);
+		this.packageContentsSelectedIndex = 0;
+		this.mode = "packageItems";
+	}
+
+	private handlePackageItemsInput(data: string): void {
+		const kb = getKeybindings();
+		if (kb.matches(data, "tui.select.cancel")) {
+			this.mode = "packageGroups";
+			return;
+		}
+		if (kb.matches(data, "tui.select.up")) {
+			this.packageContentsSelectedIndex = Math.max(0, this.packageContentsSelectedIndex - 1);
+			return;
+		}
+		if (kb.matches(data, "tui.select.down")) {
+			this.packageContentsSelectedIndex = Math.min(this.packageContentsItems.length - 1, this.packageContentsSelectedIndex + 1);
+			return;
+		}
+		if (kb.matches(data, "tui.select.confirm")) {
+			const item = this.packageContentsItems[this.packageContentsSelectedIndex];
+			if (item) this.openDetailItem(item, "packageItems");
+			return;
+		}
+		if (data === " ") {
+			const item = this.packageContentsItems[this.packageContentsSelectedIndex];
+			if (!item) return;
+			if (item.category !== "themes") {
+				item.enabled = !item.enabled;
+			}
+			this.callbacks.onToggle?.(item);
 		}
 	}
 
 	private getDetailActions(item: ResourceItem): DetailAction[] {
-		if (item.category === "packages") return ["toggle", "update", "remove", "back"];
+		if (item.category === "packages") return ["manage", "toggle", "update", "remove", "back"];
+		if (item.packageSource && item.category !== "themes") return ["toggle", "expose", "back"];
 		if (item.packageSource) return ["toggle", "back"];
 		if (item.category === "themes") return ["toggle", "remove", "back"];
 		return ["toggle", "remove", "back"];
@@ -396,11 +562,17 @@ export class ResourceBrowser implements Component, Focusable {
 
 	private getDetailActionHint(action: DetailAction, item: ResourceItem): string | undefined {
 		switch (action) {
+			case "manage":
+				if (item.category !== "packages") return undefined;
+				return this.theme.fg("dim", "Enter to browse this package's contained resources");
 			case "toggle":
 				if (item.category === "themes") {
 					return item.enabled ? this.theme.fg("success", "Currently active") : this.theme.fg("dim", "Enter to apply theme");
 				}
 				return this.theme.fg("dim", item.enabled ? "Enter to disable" : "Enter to enable");
+			case "expose":
+				if (!item.packageSource || item.category === "themes") return undefined;
+				return this.theme.fg("dim", item.exposed ? "Enter to hide from category view" : "Enter to show in category view");
 			case "update":
 				if (item.category !== "packages") return undefined;
 				if (!this.supportsPackageUpdate(item)) {
@@ -418,7 +590,7 @@ export class ResourceBrowser implements Component, Focusable {
 					? this.theme.fg("warning", "Enter again to remove · Esc cancel")
 					: this.theme.fg("dim", "Enter to remove");
 			case "back":
-				return this.theme.fg("dim", "Enter to return to list");
+				return this.theme.fg("dim", "Enter to return");
 		}
 	}
 
@@ -428,11 +600,15 @@ export class ResourceBrowser implements Component, Focusable {
 
 	private getDetailActionLabel(action: DetailAction, item: ResourceItem, selected: boolean): string {
 		switch (action) {
+			case "manage":
+				return this.theme.fg("accent", "Manage Resources");
 			case "toggle":
 				if (item.category === "themes") {
 					return item.enabled ? this.theme.fg("success", "Active") : this.theme.fg("accent", "Apply");
 				}
 				return item.enabled ? this.theme.fg("warning", "Disable") : this.theme.fg("success", "Enable");
+			case "expose":
+				return item.exposed ? this.theme.fg("warning", "Hide from Category") : this.theme.fg("accent", "Show in Category");
 			case "update":
 				return "Update";
 			case "remove":
@@ -492,6 +668,19 @@ export class ResourceBrowser implements Component, Focusable {
 				this.exitDetailMode();
 			}
 		}
+		if (this.packageItem?.category === "packages") {
+			this.packageItem = this.resources.categories.packages.find((item) => item.id === this.packageItem?.id);
+			if (!this.packageItem) {
+				this.mode = "list";
+			}
+		}
+		if (this.mode === "packageItems" && this.packageItem?.category === "packages") {
+			this.packageContentsItems = this.getPackageContainedItems(this.packageItem, this.packageContentsCategory);
+			this.packageContentsSelectedIndex = Math.max(
+				0,
+				Math.min(this.packageContentsSelectedIndex, Math.max(0, this.packageContentsItems.length - 1)),
+			);
+		}
 		this.applyFilter();
 		this.selectedIndex = Math.max(0, Math.min(this.selectedIndex, this.filteredItems.length - 1));
 	}
@@ -506,8 +695,9 @@ export class ResourceBrowser implements Component, Focusable {
 	}
 
 	private exitDetailMode(): void {
-		this.mode = "list";
+		this.mode = this.detailReturnMode;
 		this.detailItem = undefined;
+		this.detailSelectedIndex = 0;
 		this.confirmingRemove = false;
 		this.actionMessage = undefined;
 		this.stopActionLoading();
@@ -520,11 +710,23 @@ export class ResourceBrowser implements Component, Focusable {
 	private openSelectedItem(): void {
 		const selected = this.filteredItems[this.selectedIndex];
 		if (!selected) return;
-		this.detailItem = selected;
+		this.openDetailItem(selected, "list");
+	}
+
+	private openDetailItem(item: ResourceItem, returnMode: Exclude<BrowserMode, "detail">): void {
+		this.detailItem = item;
+		this.detailReturnMode = returnMode;
 		this.detailSelectedIndex = 0;
 		this.confirmingRemove = false;
 		this.mode = "detail";
-		this.callbacks.onInspect?.(selected);
+		this.callbacks.onInspect?.(item);
+	}
+
+	private openPackageGroups(item: ResourceItem): void {
+		if (item.category !== "packages") return;
+		this.packageItem = item;
+		this.packageCategoryIndex = 0;
+		this.mode = "packageGroups";
 	}
 
 	private moveCategory(direction: 1 | -1): void {
@@ -537,12 +739,27 @@ export class ResourceBrowser implements Component, Focusable {
 
 	private applyFilter(): void {
 		const query = this.searchInput.getValue().trim().toLowerCase();
-		const items = this.resources.categories[this.category];
+		const items = this.getVisibleCategoryItems(this.category);
 		this.filteredItems = items.filter((item) => {
 			if (!query) return true;
 			const haystacks = [item.name, item.description, item.source, "path" in item ? item.path : item.name];
 			return haystacks.some((value) => value.toLowerCase().includes(query));
 		});
 		this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, this.filteredItems.length - 1));
+	}
+
+	private getVisibleCategoryItems(category: ResourceCategory): ResourceItem[] {
+		const items = this.resources.categories[category];
+		if (category === "packages" || category === "themes") return items;
+		return items.filter((item) => !item.packageSource || item.exposed);
+	}
+
+	private getPackageCategories(): PackageContentCategory[] {
+		return ["extensions", "skills", "prompts", "themes"];
+	}
+
+	private getPackageContainedItems(pkg: ResourceItem, category: PackageContentCategory): ResourceItem[] {
+		if (pkg.category !== "packages") return [];
+		return this.resources.categories[category].filter((item) => item.packageSource === pkg.source);
 	}
 }

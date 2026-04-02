@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, relative, resolve } from "node:path";
 import { SettingsManager } from "@mariozechner/pi-coding-agent";
-import type { FileResourceItem, ResourceCategory, ResourceItem } from "./types.js";
+import type { FileResourceItem, ResourceCategory, ResourceItem, ResourceScope } from "./types.js";
 
 interface PackageSourceFilter {
 	source: string;
@@ -29,8 +29,20 @@ export interface SettingsFile {
 	settings: SettingsShape;
 }
 
+export interface ExposedResourceEntry {
+	scope: ResourceScope;
+	category: Exclude<ResourceCategory, "packages" | "themes">;
+	package: string;
+	path: string;
+}
+
+interface ResourceHubState {
+	exposedResources?: ExposedResourceEntry[];
+}
+
 export const PROJECT_AGENT_DIR = ".pi";
 export const USER_AGENT_DIR = resolve(homedir(), ".pi", "agent");
+const RESOURCE_HUB_STATE_FILE = "resource-hub.json";
 
 export async function readSettingsFile(path: string): Promise<SettingsFile | undefined> {
 	try {
@@ -48,6 +60,12 @@ export function getProjectSettingsPath(cwd: string): string {
 
 export function getUserSettingsPath(): string {
 	return resolve(USER_AGENT_DIR, "settings.json");
+}
+
+export function getResourceHubStatePath(scope: ResourceScope, cwd: string): string {
+	return scope === "project"
+		? resolve(cwd, PROJECT_AGENT_DIR, RESOURCE_HUB_STATE_FILE)
+		: resolve(USER_AGENT_DIR, RESOURCE_HUB_STATE_FILE);
 }
 
 export function getSettingPaths(settingsFile: SettingsFile | undefined, category: ResourceCategory): string[] {
@@ -188,6 +206,32 @@ export async function addPackageToSettings(
 	return settingsPath;
 }
 
+export async function getExposedResources(cwd: string): Promise<ExposedResourceEntry[]> {
+	const [projectState, userState] = await Promise.all([
+		readResourceHubState(getResourceHubStatePath("project", cwd)),
+		readResourceHubState(getResourceHubStatePath("user", cwd)),
+	]);
+	return [...(projectState.exposedResources ?? []), ...(userState.exposedResources ?? [])];
+}
+
+export async function setResourceExposed(cwd: string, item: ResourceItem, exposed: boolean): Promise<string> {
+	if (!item.packageSource || item.category === "packages" || item.category === "themes") {
+		throw new Error(`Only package-contained extensions, skills, and prompts can be exposed`);
+	}
+	const path = item.packageRelativePath ?? inferPackageRelativePath(item);
+	const statePath = getResourceHubStatePath(item.scope, cwd);
+	const state = await readResourceHubState(statePath);
+	const entries = [...(state.exposedResources ?? [])];
+	const nextEntries = entries.filter(
+		(entry) => !(entry.category === item.category && entry.package === item.packageSource && normalizeConfigPath(entry.path) === normalizeConfigPath(path)),
+	);
+	if (exposed) {
+		nextEntries.push({ scope: item.scope, category: item.category, package: item.packageSource, path });
+	}
+	await saveResourceHubState(statePath, { exposedResources: nextEntries.length > 0 ? nextEntries : undefined });
+	return statePath;
+}
+
 function togglePackage(
 	settingsManager: SettingsManager,
 	scope: "project" | "user",
@@ -297,6 +341,20 @@ function removePathResource(
 async function saveSettingsFile(settingsPath: string, settings: SettingsShape): Promise<void> {
 	await mkdir(dirname(settingsPath), { recursive: true });
 	await writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+}
+
+async function readResourceHubState(path: string): Promise<ResourceHubState> {
+	try {
+		const raw = await readFile(path, "utf8");
+		return JSON.parse(raw) as ResourceHubState;
+	} catch {
+		return {};
+	}
+}
+
+async function saveResourceHubState(path: string, state: ResourceHubState): Promise<void> {
+	await mkdir(dirname(path), { recursive: true });
+	await writeFile(path, `${JSON.stringify(state, null, 2)}\n`, "utf8");
 }
 
 function setPackagesForScope(settingsManager: SettingsManager, scope: "project" | "user", packages: PackageSource[]): void {

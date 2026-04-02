@@ -20,6 +20,7 @@ export interface PackageResourceItem {
 	counts?: PackageResourceCounts;
 	packageSource?: string;
 	packageRelativePath?: string;
+	exposed?: boolean;
 }
 
 export interface FileResourceItem {
@@ -33,6 +34,7 @@ export interface FileResourceItem {
 	enabled: boolean;
 	packageSource?: string;
 	packageRelativePath?: string;
+	exposed?: boolean;
 }
 
 export interface ThemeResourceItem {
@@ -47,6 +49,7 @@ export interface ThemeResourceItem {
 	builtin?: boolean;
 	packageSource?: string;
 	packageRelativePath?: string;
+	exposed?: boolean;
 }
 
 export type ResourceItem = PackageResourceItem | FileResourceItem | ThemeResourceItem;
