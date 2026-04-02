@@ -1,10 +1,18 @@
 {
 	"name": "pi-resource-center",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Pi package for browsing packages, skills, extensions, prompts, and themes",
 	"type": "module",
 	"files": ["extensions", "src", "README.md"],
-	"keywords": ["pi-package"],
+	"keywords": ["pi-package", "pi", "tui", "extensions", "themes", "resources"],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/sodie2323/pi-resource-hub.git"
+	},
+	"homepage": "https://github.com/sodie2323/pi-resource-hub#readme",
+	"bugs": {
+		"url": "https://github.com/sodie2323/pi-resource-hub/issues"
+	},
 	"pi": {
 		"extensions": ["./extensions"]
 	},

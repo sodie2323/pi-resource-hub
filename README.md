@@ -1,6 +1,6 @@
 # pi-resource-center
 
-[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://github.com/sodie2323/pi-resource-hub/releases)
+[![Version](https://img.shields.io/badge/version-0.1.1-blue.svg)](https://github.com/sodie2323/pi-resource-hub/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Pi Package](https://img.shields.io/badge/pi-package-purple.svg)](https://github.com/sodie2323/pi-resource-hub)
 
@@ -37,6 +37,12 @@ This package registers:
 Running `/resource` opens the browser on the `packages` tab by default.
 
 ## Installation
+
+### Install from npm
+
+```bash
+pi install npm:pi-resource-center
+```
 
 ### Install from GitHub
 
@@ -254,9 +260,23 @@ Peer dependencies:
 - `@mariozechner/pi-coding-agent`
 - `@mariozechner/pi-tui`
 
+## Publishing
+
+This package is intended to be installable as an npm-hosted Pi package:
+
+```bash
+npm publish
+```
+
+After publishing, users can install it with:
+
+```bash
+pi install npm:pi-resource-center
+```
+
 ## Notes
 
-- The package name is `pi-resource-center`
+- The npm package name is `pi-resource-center`
 - The repository is hosted at `sodie2323/pi-resource-hub`
 - The `/resource` browser defaults to the `packages` category
 
