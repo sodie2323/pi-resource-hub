@@ -185,8 +185,8 @@ export class ResourceBrowser implements Component, Focusable {
 				: this.mode === "packageGroups"
 					? this.getPackageCategories().length
 					: this.filteredItems.length;
-		const left = this.theme.fg("accent", this.theme.bold("Resources:"));
-		const right = this.theme.fg("muted", `${count} item(s)`);
+		const left = this.theme.fg("accent", this.theme.bold("Resources"));
+		const right = this.theme.fg("muted", `${count} result${count === 1 ? "" : "s"}`);
 		const spacing = Math.max(1, width - visibleWidth(left) - visibleWidth(right));
 		return [truncateToWidth(`${left}${" ".repeat(spacing)}${right}`, width, "")];
 	}
@@ -212,7 +212,7 @@ export class ResourceBrowser implements Component, Focusable {
 
 	private renderList(width: number): string[] {
 		if (this.filteredItems.length === 0) {
-			return [this.theme.fg("muted", "No resources found")];
+			return [this.theme.fg("muted", "Nothing matches the current view")];
 		}
 
 		const startIndex = Math.max(
@@ -263,7 +263,7 @@ export class ResourceBrowser implements Component, Focusable {
 
 	private renderDetailPage(width: number): string[] {
 		const item = this.detailItem;
-		if (!item) return [this.theme.fg("muted", "No selection")];
+		if (!item) return [this.theme.fg("muted", "Nothing selected")];
 
 		const enabledText = item.enabled ? this.theme.fg("success", "on") : this.theme.fg("dim", "off");
 		const title = this.theme.fg("accent", this.theme.bold(`Resource Details: ${item.name}`));
@@ -317,7 +317,7 @@ export class ResourceBrowser implements Component, Focusable {
 	private renderPackageGroupsPage(width: number): string[] {
 		const pkg = this.packageItem;
 		if (!pkg || pkg.category !== "packages") return [this.theme.fg("muted", "No package selected")];
-		const title = this.theme.fg("accent", this.theme.bold(`Package Resources: ${pkg.name}`));
+		const title = this.theme.fg("accent", this.theme.bold(`Package Contents: ${pkg.name}`));
 		const hint = this.theme.fg("dim", "Esc to go back");
 		const spacing = Math.max(1, width - visibleWidth(title) - visibleWidth(hint));
 		const lines = [truncateToWidth(`${title}${" ".repeat(spacing)}${hint}`, width, "…"), ""];
@@ -342,7 +342,7 @@ export class ResourceBrowser implements Component, Focusable {
 		const spacing = Math.max(1, width - visibleWidth(title) - visibleWidth(hint));
 		const lines = [truncateToWidth(`${title}${" ".repeat(spacing)}${hint}`, width, "…"), ""];
 		if (this.packageContentsItems.length === 0) {
-			lines.push(this.theme.fg("muted", "No package resources found"));
+			lines.push(this.theme.fg("muted", "This package doesn't provide anything in this category"));
 			return lines;
 		}
 
@@ -370,18 +370,18 @@ export class ResourceBrowser implements Component, Focusable {
 
 	private renderFooter(width: number): string {
 		return truncateToWidth(
-			this.theme.fg("dim", "Left/Right switch tabs · Up/Down navigate · Space toggle/apply · Enter inspect · Esc close"),
+			this.theme.fg("dim", "Left/Right switch tabs · Up/Down move · Space toggle/apply · Enter open details · Esc close"),
 			width,
 			"…",
 		);
 	}
 
 	private renderDetailFooter(width: number): string {
-		return truncateToWidth(this.theme.fg("dim", "Up/Down choose action · Enter confirm · Esc back"), width, "…");
+		return truncateToWidth(this.theme.fg("dim", "Up/Down move · Enter confirm · Esc back"), width, "…");
 	}
 
 	private renderPackageFooter(width: number): string {
-		return truncateToWidth(this.theme.fg("dim", "Up/Down navigate · Enter inspect/open · Space toggle/apply · Esc back"), width, "…");
+		return truncateToWidth(this.theme.fg("dim", "Up/Down move · Enter open details · Space toggle/apply · Esc back"), width, "…");
 	}
 
 	private renderDescriptionBlock(text: string, width: number): string[] {
@@ -427,6 +427,7 @@ export class ResourceBrowser implements Component, Focusable {
 				this.confirmingRemove = false;
 				this.actionMessage = undefined;
 			}
+			this.clearTransientActionMessage();
 			this.detailSelectedIndex = Math.max(0, this.detailSelectedIndex - 1);
 			return;
 		}
@@ -435,6 +436,7 @@ export class ResourceBrowser implements Component, Focusable {
 				this.confirmingRemove = false;
 				this.actionMessage = undefined;
 			}
+			this.clearTransientActionMessage();
 			this.detailSelectedIndex = Math.min(actions.length - 1, this.detailSelectedIndex + 1);
 			return;
 		}
@@ -564,33 +566,33 @@ export class ResourceBrowser implements Component, Focusable {
 		switch (action) {
 			case "manage":
 				if (item.category !== "packages") return undefined;
-				return this.theme.fg("dim", "Enter to browse this package's contained resources");
+				return this.theme.fg("dim", "Browse resources in this package");
 			case "toggle":
 				if (item.category === "themes") {
-					return item.enabled ? this.theme.fg("success", "Currently active") : this.theme.fg("dim", "Enter to apply theme");
+					return item.enabled ? this.theme.fg("success", "Theme is currently active") : this.theme.fg("dim", "Apply this theme");
 				}
-				return this.theme.fg("dim", item.enabled ? "Enter to disable" : "Enter to enable");
+				return this.theme.fg("dim", item.enabled ? "Disable this resource" : "Enable this resource");
 			case "expose":
 				if (!item.packageSource || item.category === "themes") return undefined;
-				return this.theme.fg("dim", item.exposed ? "Enter to hide from category view" : "Enter to show in category view");
+				return this.theme.fg("dim", item.exposed ? "Hide from top-level category" : "Show in top-level category");
 			case "update":
 				if (item.category !== "packages") return undefined;
 				if (!this.supportsPackageUpdate(item)) {
-					return this.theme.fg("warning", "Local path packages cannot be updated");
+					return this.theme.fg("warning", "Only remote packages can be updated");
 				}
-				return this.theme.fg("dim", "Enter to update package");
+				return this.theme.fg("dim", "Update this package");
 			case "remove":
 				if (item.packageSource) {
-					return this.theme.fg("warning", "Package resources cannot be removed individually");
+					return this.theme.fg("warning", "This package resource can't be removed individually");
 				}
 				if (item.category === "themes" && !("path" in item)) {
-					return this.theme.fg("warning", "Built-in themes cannot be removed");
+					return this.theme.fg("warning", "Built-in themes can't be removed");
 				}
 				return this.confirmingRemove
-					? this.theme.fg("warning", "Enter again to remove · Esc cancel")
-					: this.theme.fg("dim", "Enter to remove");
+					? this.theme.fg("warning", "Press Enter again to remove · Esc cancels")
+					: this.theme.fg("dim", "Remove this resource");
 			case "back":
-				return this.theme.fg("dim", "Enter to return");
+				return this.theme.fg("dim", "Return to previous view");
 		}
 	}
 
@@ -601,7 +603,7 @@ export class ResourceBrowser implements Component, Focusable {
 	private getDetailActionLabel(action: DetailAction, item: ResourceItem, selected: boolean): string {
 		switch (action) {
 			case "manage":
-				return this.theme.fg("accent", "Manage Resources");
+				return this.theme.fg("accent", "Browse Package Contents");
 			case "toggle":
 				if (item.category === "themes") {
 					return item.enabled ? this.theme.fg("success", "Active") : this.theme.fg("accent", "Apply");
@@ -650,6 +652,12 @@ export class ResourceBrowser implements Component, Focusable {
 		if (!action || this.loadingAction === action) {
 			this.loadingAction = undefined;
 			this.loadingText = undefined;
+		}
+	}
+
+	private clearTransientActionMessage(): void {
+		if (!this.loadingAction) {
+			this.actionMessage = undefined;
 		}
 	}
 

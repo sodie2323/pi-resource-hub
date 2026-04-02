@@ -243,7 +243,7 @@ async function handleAddCommand(args: string, ctx: ExtensionCommandContext): Pro
 	const scope = scopeArg === "user" ? "user" : "project";
 	const settingsPath = await addPackageToSettings(ctx.cwd, source, scope);
 	await refreshCompletionCache(ctx.cwd);
-	await reloadAfterSettingsChange(ctx, `Added package to ${settingsPath}`);
+	await reloadAfterSettingsChange(ctx, `Added package ${source} · ${settingsPath}`);
 }
 
 async function handleMutateCommand(
@@ -271,28 +271,28 @@ async function handleMutateCommand(
 	const resources = await discoverResources(ctx.cwd);
 	const matches = findResources(resources, query, category);
 	if (matches.length === 0) {
-		ctx.ui.notify(`No resource matched: ${query}`, "warning");
+		ctx.ui.notify(`No resource found for "${query}"`, "warning");
 		return;
 	}
 	if (matches.length > 1) {
 		const list = matches.slice(0, 5).map((item) => `${item.category}: ${item.name}`).join(", ");
-		ctx.ui.notify(`Multiple resources matched: ${list}`, "warning");
+		ctx.ui.notify(`More than one resource matched: ${list}`, "warning");
 		return;
 	}
 
 	const item = matches[0]!;
 	if (action === "remove") {
 		if (item.packageSource) {
-			ctx.ui.notify(`Package-contained resources cannot be removed individually. Disable them instead.`, "warning");
+			ctx.ui.notify(`This resource comes from a package and can't be removed individually. Disable it instead.`, "warning");
 			return;
 		}
 		if (item.category === "themes" && !("path" in item)) {
-			ctx.ui.notify(`Built-in theme ${item.name} cannot be removed`, "warning");
+			ctx.ui.notify(`Built-in theme "${item.name}" can't be removed.`, "warning");
 			return;
 		}
 		const settingsPath = await removeResourceFromSettings(ctx.cwd, item);
 		await refreshCompletionCache(ctx.cwd);
-		await reloadAfterSettingsChange(ctx, `${item.name} removed from ${settingsPath}`);
+		await reloadAfterSettingsChange(ctx, `Removed ${item.name} · ${settingsPath}`);
 		return;
 	}
 
@@ -301,24 +301,24 @@ async function handleMutateCommand(
 			item.enabled = false;
 			const settingsPath = await toggleResourceInSettings(ctx.cwd, item);
 			await refreshCompletionCache(ctx.cwd);
-			await reloadAfterSettingsChange(ctx, `${item.name}: disabled in ${settingsPath}`);
+			await reloadAfterSettingsChange(ctx, `Disabled ${item.name} · ${settingsPath}`);
 			return;
 		}
 		if (action === "disable") {
-			ctx.ui.notify("Themes cannot be disabled. Select another theme instead.", "warning");
+			ctx.ui.notify("Themes aren't disabled directly. Apply another theme instead.", "warning");
 			return;
 		}
 		const settingsPath = await setActiveTheme(ctx.cwd, item.name, item.scope);
 		ctx.ui.setTheme(item.name);
 		await refreshCompletionCache(ctx.cwd);
-		ctx.ui.notify(`Applied theme ${item.name} via ${settingsPath}`, "info");
+		ctx.ui.notify(`Applied theme ${item.name} · ${settingsPath}`, "info");
 		return;
 	}
 
 	item.enabled = action === "enable";
 	const settingsPath = await toggleResourceInSettings(ctx.cwd, item);
 	await refreshCompletionCache(ctx.cwd);
-	await reloadAfterSettingsChange(ctx, `${item.name}: ${action}d in ${settingsPath}`);
+	await reloadAfterSettingsChange(ctx, `${action === "enable" ? "Enabled" : "Disabled"} ${item.name} · ${settingsPath}`);
 }
 
 async function handleExposureCommand(
@@ -346,25 +346,25 @@ async function handleExposureCommand(
 	const resources = await discoverResources(ctx.cwd);
 	const matches = findResources(resources, query, category);
 	if (matches.length === 0) {
-		ctx.ui.notify(`No resource matched: ${query}`, "warning");
+		ctx.ui.notify(`No resource found for "${query}"`, "warning");
 		return;
 	}
 	if (matches.length > 1) {
 		const list = matches.slice(0, 5).map((item) => `${item.category}: ${item.name}`).join(", ");
-		ctx.ui.notify(`Multiple resources matched: ${list}`, "warning");
+		ctx.ui.notify(`More than one resource matched: ${list}`, "warning");
 		return;
 	}
 
 	const item = matches[0]!;
 	if (!item.packageSource || item.category === "packages" || item.category === "themes") {
-		ctx.ui.notify("Only package-contained extensions, skills, and prompts can be shown or hidden in category views", "warning");
+		ctx.ui.notify("Only package-contained extensions, skills, and prompts can be shown or hidden in top-level categories.", "warning");
 		return;
 	}
 
 	const exposed = action === "expose";
 	const statePath = await setResourceExposed(ctx.cwd, item, exposed);
 	await refreshCompletionCache(ctx.cwd);
-	ctx.ui.notify(`${item.name}: ${exposed ? "shown in" : "hidden from"} category view via ${statePath}`, "info");
+	ctx.ui.notify(`${exposed ? "Shown" : "Hidden"} ${item.name} ${exposed ? "in" : "from"} ${item.category} · ${statePath}`, "info");
 }
 
 async function reloadAfterSettingsChange(ctx: ExtensionCommandContext, message: string): Promise<void> {
@@ -373,7 +373,7 @@ async function reloadAfterSettingsChange(ctx: ExtensionCommandContext, message: 
 		return;
 	} catch (error: unknown) {
 		const detail = error instanceof Error ? error.message : String(error);
-		ctx.ui.notify(`${message}. Settings saved, but reload failed: ${detail}`, "warning");
+		ctx.ui.notify(`${message}. Settings were saved, but reload failed: ${detail}`, "warning");
 	}
 }
 
@@ -435,7 +435,7 @@ async function openBrowser(category: ResourceCategory, ctx: ExtensionCommandCont
 				await ctx.reload();
 				return;
 			} else {
-				ctx.ui.notify("Settings saved. Run /reload when ready.", "info");
+				ctx.ui.notify("Settings saved. Run /reload when you're ready.", "info");
 			}
 		};
 		const startUpdateSpinner = (source: string) => {
@@ -449,16 +449,16 @@ async function openBrowser(category: ResourceCategory, ctx: ExtensionCommandCont
 		};
 		const updatePackage = async (item: ResourceItem) => {
 			if (item.category !== "packages") {
-				setActionMessage("update", "warning", "Update is only supported for packages");
+				setActionMessage("update", "warning", "Only packages can be updated here");
 				return;
 			}
 			if (!isRemotePackageSource(item.source)) {
-				setActionMessage("update", "warning", "Local path packages cannot be updated");
+				setActionMessage("update", "warning", "Only remote packages can be updated");
 				return;
 			}
 			const cliEntry = process.argv[1];
 			if (!cliEntry) {
-				setActionMessage("update", "error", "Could not determine pi CLI entrypoint");
+				setActionMessage("update", "error", "Couldn't determine the pi CLI entrypoint");
 				return;
 			}
 			startUpdateSpinner(item.source);
@@ -469,14 +469,14 @@ async function openBrowser(category: ResourceCategory, ctx: ExtensionCommandCont
 				if (result.code === 0) {
 					hasPendingChanges = true;
 					await refreshBrowser();
-					setActionMessage("update", "info", output || `Updated ${item.source}`);
+					setActionMessage("update", "info", output || `Updated package ${item.source}`);
 				} else {
-					setActionMessage("update", "error", output || `Failed to update ${item.source}`);
+					setActionMessage("update", "error", output || `Failed to update package ${item.source}`);
 				}
 			} catch (error: unknown) {
 				stopUpdateSpinner();
 				const message = error instanceof Error ? error.message : String(error);
-				setActionMessage("update", "error", `Failed: ${message}`);
+				setActionMessage("update", "error", `Failed to update package: ${message}`);
 			}
 		};
 		const toggleItem = async (item: ResourceItem) => {
@@ -485,51 +485,51 @@ async function openBrowser(category: ResourceCategory, ctx: ExtensionCommandCont
 					const settingsPath = await setActiveTheme(ctx.cwd, item.name, item.scope);
 					ctx.ui.setTheme(item.name);
 					await refreshBrowser();
-					setActionMessage("toggle", "info", `Applied theme ${item.name} (${settingsPath})`);
+					setActionMessage("toggle", "info", `Applied theme ${item.name} · ${settingsPath}`);
 					return;
 				}
 				const settingsPath = await toggleResourceInSettings(ctx.cwd, item);
 				hasPendingChanges = true;
 				await refreshBrowser();
-				setActionMessage("toggle", "info", `${item.enabled ? "Enabled" : "Disabled"} (${settingsPath})`);
+				setActionMessage("toggle", "info", `${item.enabled ? "Enabled" : "Disabled"} ${item.name} · ${settingsPath}`);
 			} catch (error: unknown) {
 				if (item.category !== "themes") {
 					item.enabled = !item.enabled;
 				}
 				const message = error instanceof Error ? error.message : String(error);
-				setActionMessage("toggle", "error", `Failed: ${message}`);
+				setActionMessage("toggle", "error", `Failed to update resource state: ${message}`);
 			}
 		};
 		const exposeItem = async (item: ResourceItem) => {
 			try {
 				const statePath = await setResourceExposed(ctx.cwd, item, Boolean(item.exposed));
 				await refreshBrowser();
-				setActionMessage("expose", "info", `${item.exposed ? "Shown in" : "Hidden from"} category view (${statePath})`);
+				setActionMessage("expose", "info", `${item.exposed ? "Shown" : "Hidden"} ${item.name} ${item.exposed ? "in" : "from"} ${item.category} · ${statePath}`);
 			} catch (error: unknown) {
 				item.exposed = !item.exposed;
 				const message = error instanceof Error ? error.message : String(error);
-				setActionMessage("expose", "error", `Failed: ${message}`);
+				setActionMessage("expose", "error", `Failed to update category visibility: ${message}`);
 			}
 		};
 		const removeItem = async (item: ResourceItem) => {
 			try {
 				if (item.packageSource) {
-					setActionMessage("remove", "warning", "Package-contained resources cannot be removed individually. Disable them instead.");
+					setActionMessage("remove", "warning", "This resource comes from a package and can't be removed individually. Disable it instead.");
 					return;
 				}
 				if (item.category === "themes" && !("path" in item)) {
-					setActionMessage("remove", "warning", `Built-in theme ${item.name} cannot be removed`);
+					setActionMessage("remove", "warning", `Built-in theme "${item.name}" can't be removed.`);
 					return;
 				}
 				const settingsPath = await removeResourceFromSettings(ctx.cwd, item);
 				hasPendingChanges = true;
 				browser.removeItem(item);
 				await refreshBrowser();
-				ctx.ui.notify(`${item.name} removed from ${settingsPath}`, "info");
+				ctx.ui.notify(`Removed ${item.name} · ${settingsPath}`, "info");
 				requestRender();
 			} catch (error: unknown) {
 				const message = error instanceof Error ? error.message : String(error);
-				setActionMessage("remove", "error", `Failed: ${message}`);
+				setActionMessage("remove", "error", `Failed to remove resource: ${message}`);
 			}
 		};
 		browser = new ResourceBrowser(theme, resources, category, {
