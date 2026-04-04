@@ -267,11 +267,7 @@ export class ResourceBrowser implements Component, Focusable {
 			const item = this.filteredItems[index]!;
 			const selected = index === this.selectedIndex;
 			const marker = selected ? this.theme.fg("accent", "▌") : this.theme.fg("dim", " ");
-			const toggle = item.category === "packages"
-				? this.formatPackageToggleState(item)
-				: item.enabled
-					? this.theme.fg("success", this.theme.bold("[on]"))
-					: this.theme.fg("dim", this.theme.bold("[off]"));
+			const toggle = item.category === "packages" ? this.formatPackageToggleState(item) : this.formatBinaryToggle(item.enabled, true);
 			const packageBadge = item.packageSource ? this.theme.fg("accent", this.theme.bold("[pkg] ")) : "";
 			const nameText = `${packageBadge}${item.name}`;
 			const name = selected ? this.theme.bold(nameText) : this.theme.fg("text", nameText);
@@ -381,7 +377,7 @@ export class ResourceBrowser implements Component, Focusable {
 				const countColor = items.length === 0 ? "dim" : enabledCount === items.length ? "success" : enabledCount === 0 ? "dim" : "warning";
 				line = `${selected ? this.theme.fg("accent", "› ") : "  "}${CATEGORY_LABELS[entry.category]} (${this.theme.fg(countColor, `${enabledCount}/${items.length}`)})`;
 			} else if (entry.kind === "item") {
-				const toggle = entry.item.enabled ? this.theme.fg("success", "[on]") : this.theme.fg("dim", "[off]");
+				const toggle = this.formatBinaryToggle(entry.item.enabled);
 				const exposure = entry.item.packageSource && entry.item.category !== "themes"
 					? entry.item.exposed
 						? this.theme.fg("accent", "[shown]")
@@ -413,9 +409,7 @@ export class ResourceBrowser implements Component, Focusable {
 			const item = this.packageContentsItems[index]!;
 			const selected = index === this.packageContentsSelectedIndex;
 			const marker = selected ? this.theme.fg("accent", "▌") : this.theme.fg("dim", " ");
-			const toggle = item.enabled
-				? this.theme.fg("success", this.theme.bold("[on]"))
-				: this.theme.fg("dim", this.theme.bold("[off]"));
+			const toggle = this.formatBinaryToggle(item.enabled, true);
 			const exposure = item.packageSource && item.category !== "themes"
 				? item.exposed
 					? this.theme.fg("accent", this.theme.bold("[shown]"))
@@ -469,6 +463,12 @@ export class ResourceBrowser implements Component, Focusable {
 
 	private wrapBlock(lines: string[], width: number): string[] {
 		return lines.map((line) => truncateToWidth(` ${line}`, width, "…"));
+	}
+
+	private formatBinaryToggle(enabled: boolean, bold = false): string {
+		const label = enabled ? "[x]" : "[ ]";
+		const text = bold ? this.theme.bold(label) : label;
+		return enabled ? this.theme.fg("success", text) : this.theme.fg("dim", text);
 	}
 
 	private formatPackageCounts(item: ResourceItem, detailed = false, dimmed = false): string | undefined {

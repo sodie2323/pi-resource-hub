@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.4] - 2026-04-03
+
+### Changed
+- Updated resource toggle indicators from `[on]/[off]` to `[x]/[ ]` for a more compact checkbox-style UI
+
 ## [0.1.3] - 2026-04-03
 
 ### Fixed
