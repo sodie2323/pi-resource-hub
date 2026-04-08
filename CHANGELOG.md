@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.6] - 2026-04-08
+
+### Fixed
+- Corrected `/resource` command argument completion replacement values so accepting suggestions no longer overwrites the leading subcommand.
+- Improved `/resource add` scope validation and refreshed completion caches after `/resource sync`.
+
+### Changed
+- Enhanced `/resource add` completions with source-prefix suggestions and local directory completions.
+- Prioritized category suggestions for `/resource enable`, `/resource disable`, `/resource remove`, `/resource expose`, and `/resource hide`.
+- Ranked local directory completions to prefer likely package folders and de-prioritize common tooling directories.
+
 ## [0.1.5] - 2026-04-07
 
 ### Fixed

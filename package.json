@@ -1,6 +1,6 @@
 {
 	"name": "pi-resource-center",
-	"version": "0.1.5",
+	"version": "0.1.6",
 	"description": "Pi package for browsing packages, skills, extensions, prompts, and themes",
 	"type": "module",
 	"files": ["extensions", "src", "README.md"],

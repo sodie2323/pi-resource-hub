@@ -1,11 +1,11 @@
 # pi-resource-center
 
 [![npm version](https://img.shields.io/npm/v/pi-resource-center.svg)](https://www.npmjs.com/package/pi-resource-center)
-[![Version](https://img.shields.io/badge/version-0.1.1-blue.svg)](https://github.com/sodie2323/pi-resource-center/releases)
+[![Version](https://img.shields.io/badge/version-0.1.6-blue.svg)](https://github.com/sodie2323/pi-resource-center/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Pi Package](https://img.shields.io/badge/pi-package-purple.svg)](https://github.com/sodie2323/pi-resource-center)
 
-A `pi-package` for [Pi](https://github.com/mariozechner/pi-coding-agent) that adds a `/resource` command for browsing, discovering, and managing:
+A `pi-package` for [Pi](https://github.com/mariozechner/pi-coding-agent) that adds a `/resource` command and TUI for browsing, discovering, and managing:
 
 - packages
 - skills
@@ -14,6 +14,36 @@ A `pi-package` for [Pi](https://github.com/mariozechner/pi-coding-agent) that ad
 - themes
 
 It provides a keyboard-driven TUI resource browser, resource discovery across project and user scope, and command-based actions for enabling, disabling, removing, updating, and applying resources.
+
+## Table of contents
+
+- [Highlights](#highlights)
+- [Quick start](#quick-start)
+- [Common commands](#common-commands)
+- [Installation](#installation)
+  - [Install from npm](#install-from-npm)
+  - [Install from GitHub](#install-from-github)
+  - [Install from a local path](#install-from-a-local-path)
+  - [Important note about local installs](#important-note-about-local-installs)
+- [Usage](#usage)
+  - [Open the browser](#open-the-browser)
+  - [Re-run discovery](#re-run-discovery)
+  - [Core command groups](#core-command-groups)
+  - [Add a package source](#add-a-package-source)
+  - [Enable, disable, remove, expose, or hide resources](#enable-disable-remove-expose-or-hide-resources)
+- [Theme behavior](#theme-behavior)
+- [TUI controls](#tui-controls)
+  - [Browser view](#browser-view)
+  - [Detail view](#detail-view)
+- [Discovery model](#discovery-model)
+  - [Project scope](#project-scope)
+  - [User scope](#user-scope)
+  - [Package sources](#package-sources)
+- [Repository structure](#repository-structure)
+- [Requirements](#requirements)
+- [Publishing](#publishing)
+- [Notes](#notes)
+- [License](#license)
 
 ## Highlights
 
@@ -29,13 +59,27 @@ It provides a keyboard-driven TUI resource browser, resource discovery across pr
 
 ## Quick start
 
-This package registers:
+Install the package and open the browser:
+
+```bash
+pi install npm:pi-resource-center
+```
 
 ```text
 /resource
 ```
 
 Running `/resource` opens the browser on the `packages` tab by default.
+
+## Common commands
+
+```text
+/resource
+/resource add npm:pi-resource-center project
+/resource enable extension resource-center/index.ts
+/resource remove theme my-theme
+/resource sync
+```
 
 ## Installation
 
@@ -62,7 +106,7 @@ pi install .
 Or with an absolute path:
 
 ```bash
-pi install E:/code/pi-resource-hub
+pi install E:/code/pi-resource-center
 ```
 
 ### Important note about local installs

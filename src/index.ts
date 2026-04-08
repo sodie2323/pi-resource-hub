@@ -1,3 +1,5 @@
+import { access, readdir } from "node:fs/promises";
+import { basename, dirname, resolve, sep } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 import { ResourceBrowser } from "./browser.js";
 import { discoverResources } from "./discovery.js";
@@ -6,18 +8,29 @@ import { isRemotePackageSource, type ResourceCategory, type ResourceItem } from 
 
 const CATEGORIES: ResourceCategory[] = ["packages", "skills", "extensions", "prompts", "themes"];
 const ROOT_COMPLETIONS = [
-	{ value: "add", description: "Add a package source to project or user settings" },
-	{ value: "remove", description: "Remove a resource or package from settings" },
-	{ value: "enable", description: "Enable a resource or package in settings" },
-	{ value: "disable", description: "Disable a resource or package in settings" },
-	{ value: "expose", description: "Show a package-contained resource in its top-level category" },
-	{ value: "hide", description: "Hide a package-contained resource from its top-level category" },
+	{ value: "add ", label: "add", description: "Add a package source to project or user settings" },
+	{ value: "remove ", label: "remove", description: "Remove a resource or package from settings" },
+	{ value: "enable ", label: "enable", description: "Enable a resource or package in settings" },
+	{ value: "disable ", label: "disable", description: "Disable a resource or package in settings" },
+	{ value: "expose ", label: "expose", description: "Show a package-contained resource in its top-level category" },
+	{ value: "hide ", label: "hide", description: "Hide a package-contained resource from its top-level category" },
 	{ value: "sync", description: "Rediscover resources and report the current count" },
 	{ value: "packages", description: "Open the packages browser" },
 	{ value: "skills", description: "Open the skills browser" },
 	{ value: "extensions", description: "Open the extensions browser" },
 	{ value: "prompts", description: "Open the prompts browser" },
 	{ value: "themes", description: "Open the themes browser" },
+] as const;
+const ADD_SOURCE_COMPLETIONS = [
+	{ value: "npm:", description: "Install a package from npm, for example npm:pi-resource-center" },
+	{ value: "git:", description: "Install a package from a git URL, for example git:https://github.com/user/repo.git" },
+	{ value: "https://", description: "Install a package from a remote HTTPS URL" },
+	{ value: "http://", description: "Install a package from a remote HTTP URL" },
+	{ value: "./", description: "Install a package from a local path relative to the current project" },
+	{ value: "../", description: "Install a package from a sibling or parent directory" },
+	{ value: "/", description: "Install a package from an absolute path" },
+	{ value: "E:/", description: "Install a package from an absolute Windows path" },
+	{ value: "C:/", description: "Install a package from an absolute Windows path" },
 ] as const;
 const ADD_SCOPE_COMPLETIONS = [
 	{ value: "project", description: "Write to the current project's pi settings" },
@@ -36,6 +49,8 @@ const EXPOSURE_CATEGORY_COMPLETIONS = [
 	{ value: "extension", description: "Match a package-contained extension by name, source, or path" },
 	{ value: "prompt", description: "Match a package-contained prompt by name, source, or path" },
 ] as const;
+const NOISY_DIRECTORY_NAMES = new Set([".git", "node_modules", ".next", "dist", "build", "coverage"]);
+
 const CATEGORY_ALIAS_MAP: Record<string, ResourceCategory> = {
 	package: "packages",
 	packages: "packages",
@@ -63,21 +78,25 @@ let exposureCompletionCache: Record<Exclude<ResourceCategory, "packages" | "them
 	prompts: [],
 };
 
+let completionCwd = process.cwd();
+
 export default function resourceCenter(pi: ExtensionAPI) {
 	pi.registerCommand("resource", {
 		description: "Browse packages, skills, extensions, prompts, and themes",
-		getArgumentCompletions: (prefix) => getResourceArgumentCompletions(prefix),
+		getArgumentCompletions: async (prefix) => getResourceArgumentCompletions(prefix),
 		handler: async (args, ctx) => {
 			await handleResourceCommand(args, ctx, pi);
 		},
 	});
 
 	pi.on("session_start", async (_event, ctx) => {
+		completionCwd = ctx.cwd;
 		await refreshCompletionCache(ctx.cwd);
 	});
 }
 
 async function handleResourceCommand(args: string, ctx: ExtensionCommandContext, pi: ExtensionAPI): Promise<void> {
+	completionCwd = ctx.cwd;
 	const [subcommand] = args.trim().split(/\s+/, 1);
 	if (!subcommand) {
 		await openBrowser("packages", ctx, pi);
@@ -91,6 +110,7 @@ async function handleResourceCommand(args: string, ctx: ExtensionCommandContext,
 
 	if (subcommand === "sync") {
 		const resources = await discoverResources(ctx.cwd);
+		await refreshCompletionCache(ctx.cwd);
 		const count = Object.values(resources.categories).reduce((sum, items) => sum + items.length, 0);
 		ctx.ui.notify(`Discovered ${count} resources`, "info");
 		return;
@@ -133,7 +153,7 @@ function isCategory(value: string): value is ResourceCategory {
 	return CATEGORIES.includes(value as ResourceCategory);
 }
 
-function getResourceArgumentCompletions(prefix: string) {
+async function getResourceArgumentCompletions(prefix: string) {
 	const trimmed = prefix.trimStart();
 	const parts = trimmed.split(/\s+/).filter(Boolean);
 	const endsWithSpace = /\s$/.test(prefix);
@@ -147,32 +167,57 @@ function getResourceArgumentCompletions(prefix: string) {
 	}
 
 	const command = parts[0]!;
+	const commandPrefix = `${command} `;
+
 	if (command === "add") {
-		const current = endsWithSpace ? "" : (parts[parts.length - 1] ?? "");
-		return buildCompletionItems(ADD_SCOPE_COMPLETIONS, current);
+		if (parts.length === 1) {
+			return buildScopedCompletionItems(ADD_SOURCE_COMPLETIONS, "", commandPrefix);
+		}
+		if (parts.length === 2 && !endsWithSpace) {
+			const current = parts[1] ?? "";
+			const pathCompletions = isLikelyLocalPathInput(current) ? await getLocalPathCompletions(current) : null;
+			const sourceCompletions = buildScopedCompletionItems(ADD_SOURCE_COMPLETIONS, current, commandPrefix);
+			const matchingScopeCompletions = buildScopedCompletionItems(ADD_SCOPE_COMPLETIONS, current, commandPrefix);
+			return prefixCompletionValues(pathCompletions, commandPrefix) ?? sourceCompletions ?? matchingScopeCompletions;
+		}
+		if (parts.length > 3 || (parts.length === 3 && endsWithSpace)) {
+			return null;
+		}
+		const current = parts.length === 2 ? "" : (parts[parts.length - 1] ?? "");
+		return buildScopedCompletionItems(ADD_SCOPE_COMPLETIONS, current, `add ${parts[1]!} `);
 	}
 
 	if (["remove", "enable", "disable"].includes(command)) {
-		if (parts.length === 1 || (parts.length === 2 && !endsWithSpace)) {
-			const current = endsWithSpace ? "" : (parts[parts.length - 1] ?? "");
-			return buildCompletionItems(MUTATION_CATEGORY_COMPLETIONS, current);
+		if (parts.length === 1) {
+			return buildScopedCompletionItems(MUTATION_CATEGORY_COMPLETIONS, "", commandPrefix);
 		}
-
+		if (parts.length === 2 && !endsWithSpace) {
+			const current = parts[1] ?? "";
+			return buildScopedCompletionItems(prioritizeCategoryCompletions(MUTATION_CATEGORY_COMPLETIONS, allResourceCompletionValues()), current, commandPrefix);
+		}
+		if (!isCategoryAlias(parts[1]!)) {
+			return null;
+		}
 		const category = normalizeCategoryAlias(parts[1]!);
 		const current = endsWithSpace ? "" : (parts[parts.length - 1] ?? "");
-		return buildCompletionItems(resourceCompletionCache[category], current);
+		return buildScopedCompletionItems(resourceCompletionCache[category], current, `${command} ${parts[1]!} `);
 	}
 
 	if (["expose", "hide"].includes(command)) {
-		if (parts.length === 1 || (parts.length === 2 && !endsWithSpace)) {
-			const current = endsWithSpace ? "" : (parts[parts.length - 1] ?? "");
-			return buildCompletionItems(EXPOSURE_CATEGORY_COMPLETIONS, current);
+		if (parts.length === 1) {
+			return buildScopedCompletionItems(EXPOSURE_CATEGORY_COMPLETIONS, "", commandPrefix);
 		}
-
+		if (parts.length === 2 && !endsWithSpace) {
+			const current = parts[1] ?? "";
+			return buildScopedCompletionItems(prioritizeCategoryCompletions(EXPOSURE_CATEGORY_COMPLETIONS, allExposureCompletionValues()), current, commandPrefix);
+		}
+		if (!isCategoryAlias(parts[1]!)) {
+			return null;
+		}
 		const category = normalizeCategoryAlias(parts[1]!);
 		if (category === "packages" || category === "themes") return null;
 		const current = endsWithSpace ? "" : (parts[parts.length - 1] ?? "");
-		return buildCompletionItems(exposureCompletionCache[category], current);
+		return buildScopedCompletionItems(exposureCompletionCache[category], current, `${command} ${parts[1]!} `);
 	}
 
 	return null;
@@ -196,6 +241,30 @@ function buildCompletionItems(
 			return value.value.toLowerCase().startsWith(normalizedPrefix);
 		});
 	return items.length > 0 ? items : null;
+}
+
+function buildScopedCompletionItems(
+	values: ReadonlyArray<string | { value: string; description?: string; label?: string }>,
+	prefix: string,
+	replacementPrefix: string,
+) {
+	const items = buildCompletionItems(values, prefix);
+	return prefixCompletionValues(items, replacementPrefix);
+}
+
+function prioritizeCategoryCompletions(
+	categories: ReadonlyArray<{ value: string; description?: string; label?: string }>,
+	values: ReadonlyArray<string>,
+) {
+	return [...categories, ...values];
+}
+
+function prefixCompletionValues<T extends { value: string; label?: string; description?: string }>(
+	items: T[] | null,
+	replacementPrefix: string,
+) {
+	if (!items) return null;
+	return items.map((item) => ({ ...item, value: `${replacementPrefix}${item.value}` }));
 }
 
 function sliceCommandArgs(args: string, subcommand: string): string {
@@ -231,6 +300,98 @@ function uniqueCompletionValues(items: ResourceItem[]): string[] {
 	);
 }
 
+function allResourceCompletionValues(): string[] {
+	return Array.from(new Set(Object.values(resourceCompletionCache).flat()));
+}
+
+function allExposureCompletionValues(): string[] {
+	return Array.from(new Set(Object.values(exposureCompletionCache).flat()));
+}
+
+function isLikelyLocalPathInput(value: string): boolean {
+	return value.startsWith("./") || value.startsWith("../") || value.startsWith("/") || /^[A-Za-z]:[\\/]/.test(value);
+}
+
+async function getLocalPathCompletions(input: string) {
+	const normalizedInput = input.replace(/\\/g, "/");
+	const hasTrailingSlash = normalizedInput.endsWith("/");
+	const baseInput = hasTrailingSlash ? normalizedInput.slice(0, -1) : normalizedInput;
+	const searchDirInput = hasTrailingSlash ? normalizedInput : dirname(baseInput).replace(/\\/g, "/");
+	const fragment = hasTrailingSlash ? "" : basename(baseInput);
+	const resolvedSearchDir = resolveLocalCompletionDir(searchDirInput);
+	if (!resolvedSearchDir) return null;
+
+	try {
+		const entries = await readdir(resolvedSearchDir, { withFileTypes: true });
+		const candidates = entries
+			.filter((entry) => entry.isDirectory())
+			.map((entry) => entry.name)
+			.filter((name) => name.toLowerCase().startsWith(fragment.toLowerCase()));
+		const scored = await Promise.all(
+			candidates.map(async (name) => ({
+				name,
+				score: await scoreLocalPackageDirectory(resolvedSearchDir, name),
+			})),
+		);
+		const values = scored
+			.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+			.map(({ name, score }) => ({
+				value: joinCompletionPath(searchDirInput, name),
+				description: describeLocalPackageDirectory(name, score),
+				label: `${name}/`,
+			}));
+		return values.length > 0 ? values : null;
+	} catch {
+		return null;
+	}
+}
+
+async function scoreLocalPackageDirectory(parentDir: string, name: string): Promise<number> {
+	const dirPath = resolve(parentDir, name);
+	let score = 0;
+	if (NOISY_DIRECTORY_NAMES.has(name)) score -= 100;
+	if (await pathExists(resolve(dirPath, "package.json"))) score += 100;
+	if (name.startsWith("pi-")) score += 25;
+	if (await pathExists(resolve(dirPath, "extensions"))) score += 15;
+	if (await pathExists(resolve(dirPath, "skills"))) score += 10;
+	if (await pathExists(resolve(dirPath, ".pi"))) score += 10;
+	return score;
+}
+
+function describeLocalPackageDirectory(name: string, score: number): string {
+	if (NOISY_DIRECTORY_NAMES.has(name)) return "Common build/tooling directory";
+	if (score >= 100) return "Local package directory (contains package.json)";
+	if (score >= 25) return "Likely local package directory";
+	return "Local directory";
+}
+
+async function pathExists(path: string): Promise<boolean> {
+	try {
+		await access(path);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+function resolveLocalCompletionDir(searchDirInput: string): string | undefined {
+	if (!searchDirInput || searchDirInput === ".") return completionCwd;
+	if (searchDirInput === "/") return sep;
+	if (/^[A-Za-z]:\/$/.test(searchDirInput)) return searchDirInput;
+	if (/^[A-Za-z]:\//.test(searchDirInput)) return resolve(searchDirInput);
+	if (searchDirInput.startsWith("/")) return resolve(searchDirInput);
+	return resolve(completionCwd, searchDirInput);
+}
+
+function joinCompletionPath(baseInput: string, name: string): string {
+	const normalizedBase = baseInput.replace(/\\/g, "/");
+	if (!normalizedBase || normalizedBase === ".") return `./${name}/`;
+	if (normalizedBase === "/") return `/${name}/`;
+	if (/^[A-Za-z]:\/$/.test(normalizedBase)) return `${normalizedBase}${name}/`;
+	if (normalizedBase.endsWith("/")) return `${normalizedBase}${name}/`;
+	return `${normalizedBase}/${name}/`;
+}
+
 async function handleAddCommand(args: string, ctx: ExtensionCommandContext): Promise<void> {
 	const parts = args.split(/\s+/).filter(Boolean);
 	if (parts.length === 0) {
@@ -238,8 +399,17 @@ async function handleAddCommand(args: string, ctx: ExtensionCommandContext): Pro
 		return;
 	}
 
+	if (parts.length > 2) {
+		ctx.ui.notify("Usage: /resource add <package-source> [project|user]", "info");
+		return;
+	}
+
 	const source = parts[0]!;
 	const scopeArg = parts[1];
+	if (scopeArg && scopeArg !== "project" && scopeArg !== "user") {
+		ctx.ui.notify(`Unknown scope "${scopeArg}". Use project or user.`, "warning");
+		return;
+	}
 	const scope = scopeArg === "user" ? "user" : "project";
 	const settingsPath = await addPackageToSettings(ctx.cwd, source, scope);
 	await refreshCompletionCache(ctx.cwd);
