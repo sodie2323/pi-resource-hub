@@ -5,6 +5,8 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Pi Package](https://img.shields.io/badge/pi-package-purple.svg)](https://github.com/sodie2323/pi-resource-center)
 
+> Questions, feedback, or bug reports? [Join the discussion on Discord](https://discord.com/channels/1456806362351669492/1489814646679666821).
+
 A `pi-package` for [Pi](https://github.com/mariozechner/pi-coding-agent) that adds a `/resource` command and TUI for browsing, discovering, and managing:
 
 - packages
