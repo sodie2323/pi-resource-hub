@@ -31,10 +31,25 @@ export async function discoverResources(cwd: string): Promise<ResourceIndex> {
 	const packageCounts = buildPackageCountMap(resolvedPaths);
 	const packageEnabledCounts = buildPackageEnabledSummaryMap(resolvedPaths, selectedTheme);
 	const packageDescriptions = await buildPackageDescriptionMap(resolvedPaths);
+	const packageInstallPaths = buildPackageInstallPathMap(resolvedPaths);
 	const exposedResources = await getExposedResources(cwd);
 	const [projectPackages, userPackages] = await Promise.all([
-		buildPackageItems((projectSettings.packages ?? []) as PackageSource[], "project", packageCounts, packageEnabledCounts, packageDescriptions),
-		buildPackageItems((userSettings.packages ?? []) as PackageSource[], "user", packageCounts, packageEnabledCounts, packageDescriptions),
+		buildPackageItems(
+			(projectSettings.packages ?? []) as PackageSource[],
+			"project",
+			packageCounts,
+			packageEnabledCounts,
+			packageDescriptions,
+			packageInstallPaths,
+		),
+		buildPackageItems(
+			(userSettings.packages ?? []) as PackageSource[],
+			"user",
+			packageCounts,
+			packageEnabledCounts,
+			packageDescriptions,
+			packageInstallPaths,
+		),
 	]);
 
 	const categories: ResourceIndex["categories"] = {
@@ -54,6 +69,7 @@ async function buildPackageItems(
 	counts: Map<string, PackageResourceCounts>,
 	enabledSummaries: Map<string, PackageEnabledSummary>,
 	packageDescriptions: Map<string, string>,
+	packageInstallPaths: Map<string, string>,
 ): Promise<ResourceItem[]> {
 	return sortItems(
 		packages.map((source) => {
@@ -61,6 +77,7 @@ async function buildPackageItems(
 			const packageCounts = counts.get(toPackageKey(scope, spec));
 			const enabledSummary = enabledSummaries.get(toPackageKey(scope, spec));
 			const packageDescription = packageDescriptions.get(toPackageKey(scope, spec));
+			const installPath = packageInstallPaths.get(toPackageKey(scope, spec));
 			return {
 				category: "packages",
 				id: `packages:${scope}:${spec}`,
@@ -73,6 +90,7 @@ async function buildPackageItems(
 				enabled: isPackageSourceEnabled(source),
 				counts: packageCounts,
 				enabledSummary,
+				installPath,
 			};
 		}),
 	);
@@ -206,6 +224,18 @@ function buildPackageEnabledSummaryMap(
 		}
 	}
 	return summaries;
+}
+
+function buildPackageInstallPathMap(resolvedPaths: ResolvedPaths): Map<string, string> {
+	const installPaths = new Map<string, string>();
+	for (const category of RESOURCE_CATEGORIES) {
+		if (category === "packages") continue;
+		for (const resource of resolvedPaths[category]) {
+			if (resource.metadata.origin !== "package" || !isSupportedScope(resource.metadata.scope) || !resource.metadata.baseDir) continue;
+			installPaths.set(toPackageKey(resource.metadata.scope, resource.metadata.source), resource.metadata.baseDir);
+		}
+	}
+	return installPaths;
 }
 
 async function buildPackageDescriptionMap(resolvedPaths: ResolvedPaths): Promise<Map<string, string>> {

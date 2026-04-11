@@ -24,6 +24,7 @@ export interface PackageResourceItem {
 	enabled: boolean;
 	counts?: PackageResourceCounts;
 	enabledSummary?: PackageEnabledSummary;
+	installPath?: string;
 	packageSource?: string;
 	packageRelativePath?: string;
 	exposed?: boolean;

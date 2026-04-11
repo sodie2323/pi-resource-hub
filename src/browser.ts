@@ -309,20 +309,18 @@ export class ResourceBrowser implements Component, Focusable {
 			: item.enabled
 				? this.theme.fg("success", "on")
 				: this.theme.fg("dim", "off");
-		const originLabel = item.category === "packages" ? "Package Source Type" : "Discovery Source";
-		const valueLabel = "path" in item ? "Resource Path" : item.category === "packages" ? "Package Name" : "Resource Name";
-		const valueText = "path" in item ? item.path : item.name;
+		const sourceText = item.packageSource ?? item.source;
+		const pathText = item.category === "packages" ? item.installPath : "path" in item ? item.path : undefined;
 		const lines = [
 			truncateToWidth(`${this.theme.fg("muted", "Category")}: ${CATEGORY_LABELS[item.category]}`, width, "…"),
 			truncateToWidth(`${this.theme.fg("muted", "Enabled")}: ${enabledText}`, width, "…"),
 			truncateToWidth(`${this.theme.fg("muted", "Scope")}: ${item.scope}`, width, "…"),
-			...(item.packageSource
-				? [truncateToWidth(`${this.theme.fg("muted", "Package Source")}: ${item.packageSource}`, width, "…")]
-				: [truncateToWidth(`${this.theme.fg("muted", originLabel)}: ${item.source}`, width, "…")]),
+			truncateToWidth(`${this.theme.fg("muted", "Name")}: ${item.name}`, width, "…"),
+			truncateToWidth(`${this.theme.fg("muted", "Source")}: ${sourceText}`, width, "…"),
 			...(item.packageRelativePath
-				? [truncateToWidth(`${this.theme.fg("muted", "Resource Path in Package")}: ${item.packageRelativePath}`, width, "…")]
+				? [truncateToWidth(`${this.theme.fg("muted", "Path in Package")}: ${item.packageRelativePath}`, width, "…")]
 				: []),
-			truncateToWidth(`${this.theme.fg("muted", valueLabel)}: ${valueText}`, width, "…"),
+			...(pathText ? [truncateToWidth(`${this.theme.fg("muted", "Path")}: ${pathText}`, width, "…")] : []),
 		];
 		if (item.category === "packages") {
 			const enabledSummary = this.formatPackageEnabledSummary(item);
