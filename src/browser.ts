@@ -3,7 +3,6 @@ import type { ResourceCenterSettings } from "./settings.js";
 import {
 	type Component,
 	type Focusable,
-	getKeybindings,
 	Input,
 	fuzzyFilter,
 	SettingsList,
@@ -16,7 +15,6 @@ import {
 	SETTINGS_SECTION_ORDER,
 	SORT_MODE_LABELS,
 	SORT_MODE_VALUES,
-	formatPackageLabel,
 	sortModeFromLabel,
 	type BrowserCallbacks,
 	type BrowserMode,
@@ -46,7 +44,19 @@ import {
 	renderTopRule as renderTopRuleView,
 	wrapBlock as wrapBlockView,
 } from "./browser-render.js";
-import { isRemotePackageSource, type ResourceCategory, type ResourceIndex, type ResourceItem } from "./types.js";
+import { getDetailActionHint, getDetailActionLabel, getDetailActions } from "./browser-actions.js";
+import {
+	handleDetailInput as handleDetailInputMode,
+	handleListInput,
+	handlePackageGroupsInput as handlePackageGroupsInputMode,
+	handlePackageItemsInput as handlePackageItemsInputMode,
+	handleSettingsInput as handleSettingsInputMode,
+} from "./browser-input.js";
+import { getDetailFooterText, getEmptyPackageCategoryMessage, getHeaderTitle, getListFooterText, getPackageFooterText, moveSelection } from "./browser-navigation.js";
+import { isContainedResource, isPackageItem, isThemeItem } from "./resource-capabilities.js";
+import { getPackageResourceId, isSameResource } from "./resource-identity.js";
+import { prunePinnedResourceIds } from "./resource-state-prune.js";
+import type { ResourceCategory, ResourceIndex, ResourceItem } from "./types.js";
 
 export class ResourceBrowser implements Component, Focusable {
 	private readonly theme: Theme;
@@ -106,7 +116,7 @@ export class ResourceBrowser implements Component, Focusable {
 	constructor(theme: Theme, resources: ResourceIndex, category: ResourceCategory, settings: ResourceCenterSettings, callbacks: BrowserCallbacks) {
 		this.theme = theme;
 		this.resources = resources;
-		this.settings = settings;
+		this.settings = prunePinnedResourceIds(settings, resources);
 		this.category = category;
 		this.callbacks = callbacks;
 		this.mainSearchInput = new Input();
@@ -117,6 +127,7 @@ export class ResourceBrowser implements Component, Focusable {
 		this.settingsSearchInput.setValue("");
 		this.rebuildPinnedRank();
 		this.rebuildSearchTextCache();
+		this.persistPrunedSettings(settings);
 		this.applyFilter();
 	}
 
@@ -159,16 +170,15 @@ export class ResourceBrowser implements Component, Focusable {
 
 	private invalidateItemCaches(item: ResourceItem): void {
 		this.invalidateVisibleCategoryCache(item.category);
-		if (item.category === "packages") {
+		if (isPackageItem(item)) {
 			this.invalidatePackageViewCaches(item.id);
 			return;
 		}
-		if (!item.packageSource) return;
-		this.invalidatePackageViewCaches(`packages:${item.scope}:${item.packageSource}`, item.category);
+		if (!isContainedResource(item)) return;
+		this.invalidatePackageViewCaches(getPackageResourceId(item.scope, item.packageSource), item.category);
 	}
 
 	handleInput(data: string): void {
-		const kb = getKeybindings();
 		if (this.mode === "detail") {
 			this.handleDetailInput(data);
 			return;
@@ -186,64 +196,19 @@ export class ResourceBrowser implements Component, Focusable {
 			return;
 		}
 
-		if (data === "S") {
-			this.openSettings();
-			return;
-		}
-
-		if (kb.matches(data, "tui.select.cancel")) {
-			this.callbacks.onClose();
-			return;
-		}
-		if (kb.matches(data, "tui.editor.cursorLeft")) {
-			this.moveCategory(-1);
-			return;
-		}
-		if (kb.matches(data, "tui.editor.cursorRight") || kb.matches(data, "tui.input.tab")) {
-			this.moveCategory(1);
-			return;
-		}
-		if (kb.matches(data, "tui.select.up")) {
-			this.moveListSelection(-1);
-			return;
-		}
-		if (kb.matches(data, "tui.select.down")) {
-			this.moveListSelection(1);
-			return;
-		}
-		if (kb.matches(data, "tui.select.pageUp")) {
-			this.moveListSelection(-this.maxVisible);
-			return;
-		}
-		if (kb.matches(data, "tui.select.pageDown")) {
-			this.moveListSelection(this.maxVisible);
-			return;
-		}
-		if (kb.matches(data, "tui.select.confirm")) {
-			this.openSelectedItem();
-			return;
-		}
-		if (data === "P") {
-			const selected = this.filteredItems[this.selectedIndex];
-			if (selected) {
-				this.togglePinned(selected);
-			}
-			return;
-		}
-		if (data === " ") {
-			const selected = this.filteredItems[this.selectedIndex];
-			if (selected) {
-				if (selected.category !== "themes") {
-					selected.enabled = !selected.enabled;
-				}
-				this.invalidateItemCaches(selected);
-				this.callbacks.onToggle?.(selected);
-			}
-			return;
-		}
-
-		this.mainSearchInput.handleInput(data);
-		this.applyFilter();
+		handleListInput(data, {
+			selectedItem: this.filteredItems[this.selectedIndex],
+			maxVisible: this.maxVisible,
+			onOpenSettings: () => this.openSettings(),
+			onClose: () => this.callbacks.onClose(),
+			onMoveCategory: (direction) => this.moveCategory(direction),
+			onMoveSelection: (delta) => this.moveListSelection(delta),
+			onOpenSelectedItem: () => this.openSelectedItem(),
+			onTogglePinned: (item) => this.togglePinned(item),
+			onToggleItem: (item) => this.toggleItem(item),
+			searchInput: this.mainSearchInput,
+			onApplyFilter: () => this.applyFilter(),
+		});
 	}
 
 	render(width: number): string[] {
@@ -344,10 +309,10 @@ export class ResourceBrowser implements Component, Focusable {
 			settings: this.settings,
 			isPinned: (item) => this.isPinned(item),
 			detailSelectedIndex: this.detailSelectedIndex,
-			getDetailActions: (item) => this.getDetailActions(item),
-			getDetailActionLabel: (action, item, selected) => this.getDetailActionLabel(action, item, selected),
+			getDetailActions: (item) => getDetailActions(item),
+			getDetailActionLabel: (action, item, selected) => getDetailActionLabel(this.theme, action, item, { isPinned: this.isPinned(item), selected }),
 			getPersistedActionHint: (action) => this.getPersistedActionHint(action),
-			getDetailActionHint: (action, item) => this.getDetailActionHint(action, item),
+			getDetailActionHint: (action, item) => getDetailActionHint(this.theme, action, item, { isPinned: this.isPinned(item), confirmingRemove: this.confirmingRemove }),
 			formatPackageEnabledStateText: (item) => this.formatPackageEnabledStateText(item),
 			formatPackageEnabledSummary: (item) => this.formatPackageEnabledSummary(item),
 			formatPackageCounts: (item, detailed, dimmed) => this.formatPackageCounts(item, detailed, dimmed),
@@ -381,25 +346,17 @@ export class ResourceBrowser implements Component, Focusable {
 	}
 
 	private renderFooter(width: number): string {
-		const selected = this.filteredItems[this.selectedIndex];
-		const text = selected?.category === "packages"
-			? "Tab switch · ↑↓ move · Space enable/disable all contents · P pin/unpin · Enter details · Esc close"
-			: "Tab switch · ↑↓ move · Space toggle · P pin/unpin · Enter details · Esc close";
-		return this.renderFooterWithSettingsHint(width, text);
+		const selectedCategory = this.filteredItems[this.selectedIndex]?.category ?? this.category;
+		return this.renderFooterWithSettingsHint(width, getListFooterText(selectedCategory));
 	}
 
 	private renderDetailFooter(width: number): string {
-		return this.renderFooterWithSettingsHint(width, "↑↓ move · Enter confirm · P pin/unpin · Esc back");
+		return this.renderFooterWithSettingsHint(width, getDetailFooterText());
 	}
 
 	private renderPackageFooter(width: number): string {
 		const selected = this.getPackageGroupEntries()[this.packageGroupSelectionIndex];
-		const text = this.mode === "packageGroups"
-			? selected?.kind === "item"
-				? "Type to search · ↑↓ move · Space toggle · P pin/unpin · Enter details · Esc back"
-				: "Type to search · ↑↓ move · Enter open full list · Esc back"
-			: "Type to search · ↑↓ move · Enter details · Space toggle · P pin/unpin · Esc back";
-		return this.renderFooterWithSettingsHint(width, text);
+		return this.renderFooterWithSettingsHint(width, getPackageFooterText(this.mode, selected));
 	}
 
 	private renderFooterWithSettingsHint(width: number, text: string): string {
@@ -479,236 +436,99 @@ export class ResourceBrowser implements Component, Focusable {
 	}
 
 	private handleDetailInput(data: string): void {
-		const kb = getKeybindings();
-		if (data === "S") {
-			this.openSettings();
-			return;
-		}
-		if (data === "P") {
-			if (this.detailItem) {
-				this.togglePinned(this.detailItem);
-			}
-			return;
-		}
-		if (kb.matches(data, "tui.select.cancel")) {
-			if (this.confirmingRemove) {
-				this.confirmingRemove = false;
+		handleDetailInputMode(data, {
+			detailItem: this.detailItem,
+			confirmingRemove: this.confirmingRemove,
+			setConfirmingRemove: (value) => {
+				this.confirmingRemove = value;
+			},
+			clearActionMessage: () => {
 				this.actionMessage = undefined;
-				return;
-			}
-			this.exitDetailMode();
-			return;
-		}
-		const actions = this.detailItem ? this.getDetailActions(this.detailItem) : [];
-		if (kb.matches(data, "tui.select.up")) {
-			if (this.confirmingRemove) {
-				this.confirmingRemove = false;
-				this.actionMessage = undefined;
-			}
-			this.clearTransientActionMessage();
-			this.detailSelectedIndex = Math.max(0, this.detailSelectedIndex - 1);
-			return;
-		}
-		if (kb.matches(data, "tui.select.down")) {
-			if (this.confirmingRemove) {
-				this.confirmingRemove = false;
-				this.actionMessage = undefined;
-			}
-			this.clearTransientActionMessage();
-			this.detailSelectedIndex = Math.min(actions.length - 1, this.detailSelectedIndex + 1);
-			return;
-		}
-		if (!kb.matches(data, "tui.select.confirm") || !this.detailItem) return;
-		const action = actions[this.detailSelectedIndex]!;
-		if (this.loadingAction === action) return;
-		if (action === "remove") {
-			if (!this.confirmingRemove) {
-				this.confirmingRemove = true;
-				this.actionMessage = undefined;
-				return;
-			}
-			this.confirmingRemove = false;
-			this.callbacks.onRemove?.(this.detailItem);
-			return;
-		}
-		if (action === "update" && this.detailItem.category === "packages" && !this.supportsPackageUpdate(this.detailItem)) {
-			return;
-		}
-		switch (action) {
-			case "manage":
-				if (this.detailItem.category === "packages") {
-					this.openPackageGroups(this.detailItem);
-				}
-				return;
-			case "toggle":
-				if (this.detailItem.category !== "themes") {
-					this.detailItem.enabled = !this.detailItem.enabled;
-				}
-				this.invalidateItemCaches(this.detailItem);
-				this.callbacks.onToggle?.(this.detailItem);
-				return;
-			case "pin":
-				this.togglePinned(this.detailItem);
-				return;
-			case "expose":
-				this.detailItem.exposed = !this.detailItem.exposed;
-				this.invalidateItemCaches(this.detailItem);
-				this.callbacks.onExpose?.(this.detailItem);
-				return;
-			case "update":
-				this.callbacks.onUpdate?.(this.detailItem);
-				return;
-			case "back":
-				this.exitDetailMode();
-				return;
-		}
+				this.clearTransientActionMessage();
+			},
+			detailSelectedIndex: this.detailSelectedIndex,
+			setDetailSelectedIndex: (value) => {
+				this.detailSelectedIndex = value;
+			},
+			loadingAction: this.loadingAction,
+			onOpenSettings: () => this.openSettings(),
+			onExitDetailMode: () => this.exitDetailMode(),
+			onTogglePinned: (item) => this.togglePinned(item),
+			onOpenPackageGroups: (item) => this.openPackageGroups(item),
+			onToggleItem: (item) => this.toggleItem(item),
+			onToggleExpose: (item) => this.toggleExpose(item),
+			onUpdateItem: (item) => this.callbacks.onUpdate?.(item),
+			onRemoveItem: (item) => this.callbacks.onRemove?.(item),
+		});
 	}
 
 	private handlePackageGroupsInput(data: string): void {
-		const kb = getKeybindings();
-		if (data === "S") {
-			this.openSettings();
-			return;
-		}
-		if (kb.matches(data, "tui.select.cancel")) {
-			if (this.packageItem) {
-				this.openDetailItem(this.packageItem, "list");
-			} else {
-				this.mode = "list";
-			}
-			return;
-		}
-		const entries = this.getPackageGroupEntries();
-		if (kb.matches(data, "tui.select.up")) {
-			this.packageGroupSelectionIndex = Math.max(0, this.packageGroupSelectionIndex - 1);
-			return;
-		}
-		if (kb.matches(data, "tui.select.down")) {
-			this.packageGroupSelectionIndex = Math.min(entries.length - 1, this.packageGroupSelectionIndex + 1);
-			return;
-		}
-		const selected = entries[this.packageGroupSelectionIndex];
-		if (selected && data === "P" && selected.kind === "item") {
-			this.togglePinned(selected.item);
-			return;
-		}
-		if (selected && data === " " && selected.kind === "item") {
-			if (selected.item.category !== "themes") {
-				selected.item.enabled = !selected.item.enabled;
-			}
-			this.invalidateItemCaches(selected.item);
-			this.callbacks.onToggle?.(selected.item);
-			return;
-		}
-		if (selected && kb.matches(data, "tui.select.confirm") && this.packageItem?.category === "packages") {
-			if (selected.kind === "item") {
-				this.openDetailItem(selected.item, "packageGroups");
-				return;
-			}
-			this.packageContentsCategory = selected.category;
-			this.packageContentsItems = this.getFilteredPackageContainedItems(this.packageItem, this.packageContentsCategory);
-			this.packageContentsSelectedIndex = 0;
-			this.mode = "packageItems";
-			return;
-		}
-		const previousQuery = this.getSearchQuery();
-		this.packageSearchInput.handleInput(data);
-		if (this.getSearchQuery() !== previousQuery) {
-			this.invalidatePackageViewCaches(this.packageItem?.category === "packages" ? this.packageItem.id : undefined);
-		}
-		this.packageGroupSelectionIndex = Math.max(0, Math.min(this.packageGroupSelectionIndex, this.getPackageGroupEntries().length - 1));
+		handlePackageGroupsInputMode(data, {
+			packageItem: this.packageItem,
+			entries: this.getPackageGroupEntries(),
+			selectedIndex: this.packageGroupSelectionIndex,
+			setSelectedIndex: (value) => {
+				this.packageGroupSelectionIndex = value;
+			},
+			onOpenSettings: () => this.openSettings(),
+			onOpenDetailItem: (item) => this.openDetailItem(item, "packageGroups"),
+			onOpenParentPackage: (item) => this.openDetailItem(item, "list"),
+			onSetMode: (mode) => {
+				this.mode = mode;
+			},
+			onSetPackageContentsCategory: (category) => {
+				this.packageContentsCategory = category;
+				this.packageContentsSelectedIndex = 0;
+			},
+			onRefreshPackageContents: () => this.refreshPackageContentsItems(),
+			onTogglePinned: (item) => this.togglePinned(item),
+			onToggleItem: (item) => this.toggleItem(item),
+			searchInput: this.packageSearchInput,
+			getSearchQuery: () => this.getSearchQuery(),
+			onInvalidatePackageViewCaches: (packageId) => this.invalidatePackageViewCaches(packageId),
+			onGetEntriesLength: () => this.getPackageGroupEntries().length,
+		});
 	}
 
 	private handleSettingsInput(data: string): void {
-		const kb = getKeybindings();
-		if (kb.matches(data, "tui.select.cancel")) {
-			this.mode = this.settingsReturnMode;
-			return;
-		}
-		if (kb.matches(data, "tui.editor.cursorLeft")) {
-			this.moveSettingsSection(-1);
-			return;
-		}
-		if (kb.matches(data, "tui.editor.cursorRight") || kb.matches(data, "tui.input.tab")) {
-			this.moveSettingsSection(1);
-			return;
-		}
-
-		// List navigation/activation
-		if (
-			kb.matches(data, "tui.select.up") ||
-			kb.matches(data, "tui.select.down") ||
-			kb.matches(data, "tui.select.pageUp") ||
-			kb.matches(data, "tui.select.pageDown") ||
-			kb.matches(data, "tui.select.confirm") ||
-			data === " "
-		) {
-			this.ensureSettingsList().handleInput?.(data);
-			return;
-		}
-
-		// Search input (mimics /resource: typing always edits query)
-		const before = this.settingsSearchInput.getValue();
-		this.settingsSearchInput.handleInput(data);
-		if (this.settingsSearchInput.getValue() !== before) {
-			this.settingsList = undefined;
-			this.settingsListSection = undefined;
-			this.settingsListQuery = undefined;
-		}
+		handleSettingsInputMode(data, {
+			settingsReturnMode: this.settingsReturnMode,
+			onSetMode: (mode) => {
+				this.mode = mode;
+			},
+			onMoveSettingsSection: (delta) => this.moveSettingsSection(delta),
+			settingsList: () => this.ensureSettingsList(),
+			searchInput: this.settingsSearchInput,
+			onResetSettingsListCache: () => {
+				this.settingsList = undefined;
+				this.settingsListSection = undefined;
+				this.settingsListQuery = undefined;
+			},
+		});
 	}
 
 	private handlePackageItemsInput(data: string): void {
-		const kb = getKeybindings();
-		if (data === "S") {
-			this.openSettings();
-			return;
-		}
-		if (kb.matches(data, "tui.select.cancel")) {
-			this.mode = "packageGroups";
-			return;
-		}
-		if (kb.matches(data, "tui.select.up")) {
-			this.packageContentsSelectedIndex = Math.max(0, this.packageContentsSelectedIndex - 1);
-			return;
-		}
-		if (kb.matches(data, "tui.select.down")) {
-			this.packageContentsSelectedIndex = Math.min(this.packageContentsItems.length - 1, this.packageContentsSelectedIndex + 1);
-			return;
-		}
-		if (kb.matches(data, "tui.select.confirm")) {
-			const item = this.packageContentsItems[this.packageContentsSelectedIndex];
-			if (item) this.openDetailItem(item, "packageItems");
-			return;
-		}
-		if (data === "P") {
-			const item = this.packageContentsItems[this.packageContentsSelectedIndex];
-			if (item) this.togglePinned(item);
-			return;
-		}
-		if (data === " ") {
-			const item = this.packageContentsItems[this.packageContentsSelectedIndex];
-			if (!item) return;
-			if (item.category !== "themes") {
-				item.enabled = !item.enabled;
-			}
-			this.invalidateItemCaches(item);
-			this.callbacks.onToggle?.(item);
-			return;
-		}
-		const previousQuery = this.getSearchQuery();
-		this.packageSearchInput.handleInput(data);
-		if (this.getSearchQuery() !== previousQuery) {
-			this.invalidatePackageViewCaches(this.packageItem?.category === "packages" ? this.packageItem.id : undefined, this.packageContentsCategory);
-		}
-		this.refreshPackageContentsItems();
-	}
-
-	private getDetailActions(item: ResourceItem): DetailAction[] {
-		if (item.category === "packages") return ["manage", "toggle", "pin", "update", "remove", "back"];
-		if (item.packageSource && item.category !== "themes") return ["toggle", "expose", "pin", "back"];
-		if (item.packageSource) return ["toggle", "pin", "back"];
-		if (item.category === "themes") return ["toggle", "pin", "remove", "back"];
-		return ["toggle", "pin", "remove", "back"];
+		handlePackageItemsInputMode(data, {
+			selectedItem: this.packageContentsItems[this.packageContentsSelectedIndex],
+			itemsLength: this.packageContentsItems.length,
+			selectedIndex: this.packageContentsSelectedIndex,
+			setSelectedIndex: (value) => {
+				this.packageContentsSelectedIndex = value;
+			},
+			packageItem: this.packageItem,
+			packageContentsCategory: this.packageContentsCategory,
+			onOpenSettings: () => this.openSettings(),
+			onSetMode: (mode) => {
+				this.mode = mode;
+			},
+			onOpenDetailItem: (item) => this.openDetailItem(item, "packageItems"),
+			onTogglePinned: (item) => this.togglePinned(item),
+			onToggleItem: (item) => this.toggleItem(item),
+			searchInput: this.packageSearchInput,
+			getSearchQuery: () => this.getSearchQuery(),
+			onInvalidatePackageViewCaches: (packageId, category) => this.invalidatePackageViewCaches(packageId, category),
+			onRefreshPackageContents: () => this.refreshPackageContentsItems(),
+		});
 	}
 
 	private getPersistedActionHint(action: DetailAction): string | undefined {
@@ -725,82 +545,6 @@ export class ResourceBrowser implements Component, Focusable {
 					? "warning"
 					: "accent";
 		return this.theme.fg(color, this.actionMessage.text);
-	}
-
-	private getDetailActionHint(action: DetailAction, item: ResourceItem): string | undefined {
-		switch (action) {
-			case "manage":
-				if (item.category !== "packages") return undefined;
-				return this.theme.fg("dim", "Browse resources in this package");
-			case "toggle":
-				if (item.category === "packages") {
-					return this.theme.fg("dim", item.enabled ? "Disable all resources in this package" : "Enable all resources in this package");
-				}
-				if (item.category === "themes") {
-					return item.enabled ? this.theme.fg("success", "Theme is currently active") : this.theme.fg("dim", "Apply this theme");
-				}
-				return this.theme.fg("dim", item.enabled ? "Disable this resource" : "Enable this resource");
-			case "pin":
-				return this.theme.fg("dim", this.isPinned(item) ? "Remove from top" : "Keep on top of the list");
-			case "expose":
-				if (!item.packageSource || item.category === "themes") return undefined;
-				return this.theme.fg("dim", item.exposed ? "Hide from top-level category" : "Show in top-level category");
-			case "update":
-				if (item.category !== "packages") return undefined;
-				if (!this.supportsPackageUpdate(item)) {
-					return this.theme.fg("warning", "Only remote packages can be updated");
-				}
-				return this.theme.fg("dim", "Update this package");
-			case "remove":
-				if (item.packageSource) {
-					return this.theme.fg("warning", "This package resource can't be removed individually");
-				}
-				if (item.source === "convention") {
-					return this.confirmingRemove
-						? this.theme.fg("warning", "Press Enter again to delete file · Esc cancels")
-						: this.theme.fg("dim", "Delete this file from disk");
-				}
-				if (item.category === "themes" && !("path" in item)) {
-					return this.theme.fg("warning", "Built-in themes can't be removed");
-				}
-				return this.confirmingRemove
-					? this.theme.fg("warning", "Press Enter again to remove · Esc cancels")
-					: this.theme.fg("dim", "Remove this resource");
-			case "back":
-				return this.theme.fg("dim", "Return to previous view");
-		}
-	}
-
-	private supportsPackageUpdate(item: ResourceItem): boolean {
-		return item.category === "packages" && isRemotePackageSource(item.source);
-	}
-
-	private getDetailActionLabel(action: DetailAction, item: ResourceItem, selected: boolean): string {
-		switch (action) {
-			case "manage":
-				return this.theme.fg("accent", "Browse Package Contents");
-			case "toggle":
-				if (item.category === "packages") {
-					return item.enabled ? this.theme.fg("warning", "Disable All Contents") : this.theme.fg("success", "Enable All Contents");
-				}
-				if (item.category === "themes") {
-					return item.enabled ? this.theme.fg("success", "Active") : this.theme.fg("accent", "Apply");
-				}
-				return item.enabled ? this.theme.fg("warning", "Disable") : this.theme.fg("success", "Enable");
-			case "pin": {
-				const label = this.isPinned(item) ? "Unpin" : "Pin to Top";
-				const decorated = `[pin] ${label}`;
-				return selected ? this.theme.fg("accent", this.theme.bold(decorated)) : this.theme.fg("accent", decorated);
-			}
-			case "expose":
-				return item.exposed ? this.theme.fg("warning", "Hide from Category") : this.theme.fg("accent", "Show in Category");
-			case "update":
-				return "Update";
-			case "remove":
-				return selected ? this.theme.fg("error", this.theme.bold("Remove")) : this.theme.fg("error", "Remove");
-			case "back":
-				return "Back";
-		}
 	}
 
 	public setActionMessage(action: DetailAction, type: "info" | "warning" | "error", text: string | undefined): void {
@@ -854,15 +598,16 @@ export class ResourceBrowser implements Component, Focusable {
 			this.resources.categories[category] = resources.categories[category];
 		}
 		this.rebuildSearchTextCache();
+		this.pruneSettingsState();
 		this.invalidatePackageCaches();
 		if (this.detailItem) {
-			this.detailItem = this.resources.categories[this.detailItem.category].find((item) => item.id === this.detailItem?.id);
+			this.detailItem = this.resources.categories[this.detailItem.category].find((item) => isSameResource(item, this.detailItem));
 			if (!this.detailItem) {
 				this.exitDetailMode();
 			}
 		}
 		if (this.packageItem?.category === "packages") {
-			this.packageItem = this.resources.categories.packages.find((item) => item.id === this.packageItem?.id);
+			this.packageItem = this.resources.categories.packages.find((item) => isSameResource(item, this.packageItem));
 			if (!this.packageItem) {
 				this.mode = "list";
 			}
@@ -885,6 +630,7 @@ export class ResourceBrowser implements Component, Focusable {
 			this.resources.categories[category] = this.resources.categories[category].filter((candidate) => candidate.id !== item.id);
 		}
 		this.searchTextCache.delete(item.id);
+		this.pruneSettingsState();
 		this.invalidateItemCaches(item);
 		this.exitDetailMode();
 		this.applyFilter();
@@ -901,7 +647,7 @@ export class ResourceBrowser implements Component, Focusable {
 	}
 
 	private moveListSelection(delta: number): void {
-		this.selectedIndex = Math.max(0, Math.min(Math.max(0, this.filteredItems.length - 1), this.selectedIndex + delta));
+		this.selectedIndex = moveSelection(this.selectedIndex, this.filteredItems.length, delta);
 	}
 
 	private openSelectedItem(): void {
@@ -948,6 +694,19 @@ export class ResourceBrowser implements Component, Focusable {
 		this.pinnedRank = new Map((this.settings.pinned ?? []).map((id, index) => [id, index]));
 	}
 
+	private persistPrunedSettings(previousSettings: ResourceCenterSettings): void {
+		if (previousSettings.pinned.length === this.settings.pinned.length) return;
+		void this.callbacks.onSettingsChange?.(this.settings);
+	}
+
+	private pruneSettingsState(): void {
+		const previousSettings = this.settings;
+		this.settings = prunePinnedResourceIds(this.settings, this.resources);
+		if (this.settings === previousSettings) return;
+		this.rebuildPinnedRank();
+		this.persistPrunedSettings(previousSettings);
+	}
+
 	private rebuildSearchTextCache(): void {
 		this.searchTextCache.clear();
 		for (const category of CATEGORY_ORDER) {
@@ -989,6 +748,20 @@ export class ResourceBrowser implements Component, Focusable {
 		return this.pinnedRank.get(item.id) ?? Number.MAX_SAFE_INTEGER;
 	}
 
+	private toggleItem(item: ResourceItem): void {
+		if (!isThemeItem(item)) {
+			item.enabled = !item.enabled;
+		}
+		this.invalidateItemCaches(item);
+		this.callbacks.onToggle?.(item);
+	}
+
+	private toggleExpose(item: ResourceItem): void {
+		item.exposed = !item.exposed;
+		this.invalidateItemCaches(item);
+		this.callbacks.onExpose?.(item);
+	}
+
 	private togglePinned(item: ResourceItem): void {
 		const current = this.settings.pinned ?? [];
 		const exists = current.includes(item.id);
@@ -1025,37 +798,17 @@ export class ResourceBrowser implements Component, Focusable {
 	}
 
 	private getHeaderTitle(): string {
-		if (this.mode === "detail" && this.detailItem) return this.getDetailTitle(this.detailItem);
-		if (this.mode === "settings") return "Resources / Settings";
-		if (this.mode === "packageGroups" && this.packageItem?.category === "packages") {
-			return `Packages / ${formatPackageLabel(this.packageItem.source)} / Contents`;
-		}
-		if (this.mode === "packageItems" && this.packageItem?.category === "packages") {
-			return `Packages / ${formatPackageLabel(this.packageItem.source)} / ${CATEGORY_LABELS[this.packageContentsCategory]}`;
-		}
-		return `Resources / ${CATEGORY_LABELS[this.category]}`;
-	}
-
-	private getDetailTitle(item: ResourceItem): string {
-		if (item.category === "packages") return `Packages / ${formatPackageLabel(item.source)}`;
-		if (item.packageSource) return `Packages / ${formatPackageLabel(item.packageSource)} / ${CATEGORY_LABELS[item.category]} / ${item.name}`;
-		return `Resources / ${CATEGORY_LABELS[item.category]} / ${item.name}`;
+		return getHeaderTitle({
+			mode: this.mode,
+			category: this.category,
+			detailItem: this.detailItem,
+			packageItem: this.packageItem,
+			packageContentsCategory: this.packageContentsCategory,
+		});
 	}
 
 	private getEmptyPackageCategoryMessage(category: PackageContentCategory): string {
-		if (this.getSearchQuery()) {
-			return `No ${CATEGORY_LABELS[category].toLowerCase()} match the current search`;
-		}
-		switch (category) {
-			case "extensions":
-				return "This package doesn't provide any extensions";
-			case "skills":
-				return "This package doesn't provide any skills";
-			case "prompts":
-				return "This package doesn't provide any prompts";
-			case "themes":
-				return "This package doesn't provide any themes";
-		}
+		return getEmptyPackageCategoryMessage(category, Boolean(this.getSearchQuery()));
 	}
 
 	private getPackageCategories(): PackageContentCategory[] {

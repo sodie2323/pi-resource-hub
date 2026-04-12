@@ -1,5 +1,14 @@
 import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 import { discoverResources } from "./discovery.js";
+import { canExposeResource, canRemoveResourceIndividually, isContainedResource, isThemeItem } from "./resource-capabilities.js";
+import { getResourceSearchCandidates } from "./resource-identity.js";
+import {
+	getExposeSuccessMessage,
+	getRemoveBlockedMessage,
+	getRemovedConventionFileMessage,
+	getRemoveSuccessMessage,
+	getToggleSuccessMessage,
+} from "./resource-messages.js";
 import { addPackageToSettings, removeConventionResource, removeResourceFromSettings, setActiveTheme, setResourceExposed, toggleResourceInSettings } from "./settings.js";
 import { normalizeCategoryAlias } from "./resource-completions.js";
 import type { ResourceCategory, ResourceItem } from "./types.js";
@@ -62,32 +71,28 @@ export async function handleMutateCommand(
 
 	const item = matches[0]!;
 	if (action === "remove") {
-		if (item.packageSource) {
-			ctx.ui.notify("This resource comes from a package and can't be removed individually. Disable it instead.", "warning");
-			return;
-		}
-		if (item.category === "themes" && !("path" in item)) {
-			ctx.ui.notify(`Built-in theme "${item.name}" can't be removed.`, "warning");
+		if (!canRemoveResourceIndividually(item)) {
+			ctx.ui.notify(getRemoveBlockedMessage(item) ?? "Remove is not allowed for this resource.", "warning");
 			return;
 		}
 		if (item.source === "convention") {
 			const filePath = await removeConventionResource(item);
 			await refreshCompletions();
-			ctx.ui.notify(`Deleted file ${filePath}`, "info");
+			ctx.ui.notify(getRemovedConventionFileMessage(filePath), "info");
 			return;
 		}
 		const settingsPath = await removeResourceFromSettings(ctx.cwd, item);
 		await refreshCompletions();
-		await reloadAfterSettingsChange(ctx, `Removed ${item.name} · ${settingsPath}`);
+		await reloadAfterSettingsChange(ctx, getRemoveSuccessMessage(item, settingsPath));
 		return;
 	}
 
-	if (item.category === "themes") {
-		if (item.packageSource && action === "disable") {
+	if (isThemeItem(item)) {
+		if (isContainedResource(item) && action === "disable") {
 			item.enabled = false;
 			const settingsPath = await toggleResourceInSettings(ctx.cwd, item);
 			await refreshCompletions();
-			await reloadAfterSettingsChange(ctx, `Disabled ${item.name} · ${settingsPath}`);
+			await reloadAfterSettingsChange(ctx, getToggleSuccessMessage(item, settingsPath));
 			return;
 		}
 		if (action === "disable") {
@@ -97,19 +102,14 @@ export async function handleMutateCommand(
 		const settingsPath = await setActiveTheme(ctx.cwd, item.name, item.scope);
 		ctx.ui.setTheme(item.name);
 		await refreshCompletions();
-		ctx.ui.notify(`Applied theme ${item.name} · ${settingsPath}`, "info");
+		ctx.ui.notify(getToggleSuccessMessage(item, settingsPath), "info");
 		return;
 	}
 
 	item.enabled = action === "enable";
 	const settingsPath = await toggleResourceInSettings(ctx.cwd, item);
 	await refreshCompletions();
-	await reloadAfterSettingsChange(
-		ctx,
-		item.category === "packages"
-			? `${action === "enable" ? "Enabled" : "Disabled"} all resources in package ${item.name} · ${settingsPath}`
-			: `${action === "enable" ? "Enabled" : "Disabled"} ${item.name} · ${settingsPath}`,
-	);
+	await reloadAfterSettingsChange(ctx, getToggleSuccessMessage(item, settingsPath));
 }
 
 export async function handleExposureCommand(
@@ -146,14 +146,14 @@ export async function handleExposureCommand(
 		return;
 	}
 	const item = matches[0]!;
-	if (!item.packageSource || item.category === "packages" || item.category === "themes") {
+	if (!canExposeResource(item)) {
 		ctx.ui.notify("Only package-contained extensions, skills, and prompts can be shown or hidden in top-level categories.", "warning");
 		return;
 	}
 	const exposed = action === "expose";
 	const statePath = await setResourceExposed(ctx.cwd, item, exposed);
 	await refreshCompletions();
-	ctx.ui.notify(`${exposed ? "Shown" : "Hidden"} ${item.name} ${exposed ? "in" : "from"} ${item.category} · ${statePath}`, "info");
+	ctx.ui.notify(getExposeSuccessMessage(item, exposed, statePath), "info");
 }
 
 export async function reloadAfterSettingsChange(ctx: ExtensionCommandContext, message: string): Promise<void> {
@@ -169,12 +169,7 @@ export async function reloadAfterSettingsChange(ctx: ExtensionCommandContext, me
 export function findResources(resources: { categories: Record<ResourceCategory, ResourceItem[]> }, query: string, category?: ResourceCategory): ResourceItem[] {
 	const normalized = query.toLowerCase();
 	const all = category ? resources.categories[category] : Object.values(resources.categories).flat();
-	return all.filter((item) => {
-		const candidates = [item.id, item.name, item.source, item.description];
-		if (item.packageRelativePath) candidates.push(item.packageRelativePath);
-		if ("path" in item) candidates.push(item.path);
-		return candidates.some((value) => value.toLowerCase() === normalized || value.toLowerCase().includes(normalized));
-	});
+	return all.filter((item) => getResourceSearchCandidates(item).some((value) => value.toLowerCase() === normalized || value.toLowerCase().includes(normalized)));
 }
 
 function isCategoryAlias(value: string): boolean {

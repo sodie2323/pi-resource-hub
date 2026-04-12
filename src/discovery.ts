@@ -7,7 +7,8 @@ import {
 	type ResolvedPaths,
 	type ResolvedResource,
 } from "@mariozechner/pi-coding-agent";
-import { getExposedResources, isPackageSourceEnabled, type PackageSource, USER_AGENT_DIR } from "./settings.js";
+import { getExposedResources, isPackageSourceEnabled, syncPrunedExposedResources, type PackageSource, USER_AGENT_DIR } from "./settings.js";
+import { getPackageKey, getPackageResourceId } from "./resource-identity.js";
 import type {
 	FileResourceItem,
 	PackageEnabledSummary,
@@ -72,7 +73,9 @@ export async function discoverResources(cwd: string): Promise<ResourceIndex> {
 		themes: await buildThemeItems(resolvedPaths.themes, selectedTheme, caches),
 	};
 
-	return { categories };
+	const index = { categories };
+	await syncPrunedExposedResources(index);
+	return index;
 }
 
 async function buildPackageItems(
@@ -87,13 +90,14 @@ async function buildPackageItems(
 	const items = await Promise.all(
 		packages.map(async (source) => {
 			const spec = typeof source === "string" ? source : source.source;
-			const packageCounts = counts.get(toPackageKey(scope, spec));
-			const enabledSummary = enabledSummaries.get(toPackageKey(scope, spec));
-			const packageDescription = packageDescriptions.get(toPackageKey(scope, spec));
-			const installPath = packageInstallPaths.get(toPackageKey(scope, spec));
+			const packageKey = getPackageKey(scope, spec);
+			const packageCounts = counts.get(packageKey);
+			const enabledSummary = enabledSummaries.get(packageKey);
+			const packageDescription = packageDescriptions.get(packageKey);
+			const installPath = packageInstallPaths.get(packageKey);
 			return {
 				category: "packages",
-				id: `packages:${scope}:${spec}`,
+				id: getPackageResourceId(scope, spec),
 				name: spec,
 				scope,
 				source: spec,
@@ -216,7 +220,7 @@ function buildPackageCountMap(resolvedPaths: ResolvedPaths): Map<string, Package
 		if (category === "packages") continue;
 		for (const resource of resolvedPaths[category]) {
 			if (resource.metadata.origin !== "package" || !isSupportedScope(resource.metadata.scope)) continue;
-			const key = toPackageKey(resource.metadata.scope, resource.metadata.source);
+			const key = getPackageKey(resource.metadata.scope, resource.metadata.source);
 			const current = counts.get(key) ?? { extensions: 0, skills: 0, prompts: 0, themes: 0 };
 			current[category] += 1;
 			counts.set(key, current);
@@ -234,7 +238,7 @@ function buildPackageEnabledSummaryMap(
 		if (category === "packages") continue;
 		for (const resource of resolvedPaths[category]) {
 			if (resource.metadata.origin !== "package" || !isSupportedScope(resource.metadata.scope)) continue;
-			const key = toPackageKey(resource.metadata.scope, resource.metadata.source);
+			const key = getPackageKey(resource.metadata.scope, resource.metadata.source);
 			const current = summaries.get(key) ?? { enabledCount: 0, totalCount: 0 };
 			current.totalCount += 1;
 			const isEnabled = category === "themes"
@@ -255,7 +259,7 @@ function buildPackageInstallPathMap(resolvedPaths: ResolvedPaths): Map<string, s
 		if (category === "packages") continue;
 		for (const resource of resolvedPaths[category]) {
 			if (resource.metadata.origin !== "package" || !isSupportedScope(resource.metadata.scope) || !resource.metadata.baseDir) continue;
-			installPaths.set(toPackageKey(resource.metadata.scope, resource.metadata.source), resource.metadata.baseDir);
+			installPaths.set(getPackageKey(resource.metadata.scope, resource.metadata.source), resource.metadata.baseDir);
 		}
 	}
 	return installPaths;
@@ -267,7 +271,7 @@ async function buildPackageDescriptionMap(resolvedPaths: ResolvedPaths, caches: 
 		if (category === "packages") continue;
 		for (const resource of resolvedPaths[category]) {
 			if (resource.metadata.origin !== "package" || !isSupportedScope(resource.metadata.scope) || !resource.metadata.baseDir) continue;
-			packageDirs.set(toPackageKey(resource.metadata.scope, resource.metadata.source), resource.metadata.baseDir);
+			packageDirs.set(getPackageKey(resource.metadata.scope, resource.metadata.source), resource.metadata.baseDir);
 		}
 	}
 
@@ -300,10 +304,6 @@ async function readPackageDescription(packageJsonPath: string, caches: Discovery
 function getRelativeResourcePath(resource: ResolvedResource): string | undefined {
 	const baseDir = resource.metadata.baseDir;
 	return baseDir ? relative(baseDir, resource.path).replace(/\\/g, "/") : undefined;
-}
-
-function toPackageKey(scope: ResourceScope, source: string): string {
-	return `${scope}:${source}`;
 }
 
 function normalizeConfigPath(value: string): string {

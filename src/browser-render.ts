@@ -1,6 +1,7 @@
 import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@mariozechner/pi-tui";
 import type { BrowserTheme, DetailAction, PackageContentCategory, PackageGroupEntry, SettingsSection } from "./browser-shared.js";
 import { CATEGORY_LABELS, CATEGORY_ORDER, SETTINGS_SECTION_LABELS, SETTINGS_SECTION_ORDER, formatPackageLabel } from "./browser-shared.js";
+import { canExposeResource, isContainedResource, isPackageItem } from "./resource-capabilities.js";
 import type { ResourceCategory, ResourceItem } from "./types.js";
 
 export function renderHeader(theme: BrowserTheme, width: number, title: string, count: number): string[] {
@@ -60,9 +61,9 @@ export function renderListPage(args: {
 		const item = items[index]!;
 		const selected = index === selectedIndex;
 		const marker = selected ? theme.fg("accent", "▌") : theme.fg("dim", " ");
-		const toggle = item.category === "packages" ? formatPackageToggleState(item) : formatBinaryToggle(item.enabled, true);
+		const toggle = isPackageItem(item) ? formatPackageToggleState(item) : formatBinaryToggle(item.enabled, true);
 		const pinBadge = isPinned(item) ? theme.fg("accent", "[pin] ") : "";
-		const packageBadge = item.packageSource ? theme.fg("accent", theme.bold("[pkg] ")) : "";
+		const packageBadge = isContainedResource(item) ? theme.fg("accent", theme.bold("[pkg] ")) : "";
 		const nameText = `${pinBadge}${packageBadge}${item.name}`;
 		const name = selected ? theme.bold(nameText) : theme.fg("text", nameText);
 		const scope = item.scope === "project" ? theme.fg("success", "project") : theme.fg("warning", "user");
@@ -75,7 +76,7 @@ export function renderListPage(args: {
 		lines.push(line);
 
 		const nextItem = index + 1 < endIndex ? items[index + 1] : undefined;
-		if (item.category === "packages" && nextItem && nextItem.category !== "packages") {
+		if (isPackageItem(item) && nextItem && !isPackageItem(nextItem)) {
 			lines.push(theme.fg("dim", ""));
 		}
 	}
@@ -123,13 +124,13 @@ export function renderDetailPage(args: {
 	} = args;
 	if (!item) return [theme.fg("muted", "Nothing selected")];
 
-	const enabledText = item.category === "packages"
+	const enabledText = isPackageItem(item)
 		? formatPackageEnabledStateText(item)
 		: item.enabled
 			? theme.fg("success", "on")
 			: theme.fg("dim", "off");
 	const sourceText = item.packageSource ?? item.source;
-	const pathText = item.category === "packages" ? item.installPath : "path" in item ? item.path : undefined;
+	const pathText = isPackageItem(item) ? item.installPath : "path" in item ? item.path : undefined;
 	const pinnedText = isPinned(item) ? theme.fg("accent", "[pin]") : theme.fg("dim", "no");
 	const lines = [
 		truncateToWidth(`${theme.fg("muted", "Category")}: ${CATEGORY_LABELS[item.category]}`, width, "…"),
@@ -145,7 +146,7 @@ export function renderDetailPage(args: {
 			? [truncateToWidth(`${theme.fg("muted", "Path")}: ${pathText}`, width, "…")]
 			: []),
 	];
-	if (item.category === "packages") {
+	if (isPackageItem(item)) {
 		const enabledSummary = formatPackageEnabledSummary(item);
 		if (enabledSummary) lines.push(truncateToWidth(`${theme.fg("muted", "Enabled Resources")}: ${enabledSummary}`, width, "…"));
 		const counts = formatPackageCounts(item, true);
@@ -199,7 +200,7 @@ export function renderPackageGroupsPage(args: {
 		} else if (entry.kind === "item") {
 			const toggle = formatBinaryToggle(entry.item.enabled);
 			const pinBadge = isPinned(entry.item) ? theme.fg("accent", "[pin]") : "";
-			const exposure = entry.item.packageSource && entry.item.category !== "themes"
+			const exposure = canExposeResource(entry.item)
 				? entry.item.exposed
 					? theme.fg("accent", "[shown]")
 					: theme.fg("dim", "[hidden]")
@@ -239,7 +240,7 @@ export function renderPackageItemsPage(args: {
 		const marker = selected ? theme.fg("accent", "▌") : theme.fg("dim", " ");
 		const toggle = formatBinaryToggle(item.enabled, true);
 		const pinBadge = isPinned(item) ? theme.fg("accent", "[pin] ") : "";
-		const exposure = item.packageSource && item.category !== "themes"
+		const exposure = canExposeResource(item)
 			? item.exposed
 				? theme.fg("accent", theme.bold("[shown]"))
 				: theme.fg("dim", "[hidden]")

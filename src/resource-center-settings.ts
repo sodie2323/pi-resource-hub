@@ -1,6 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { ResourceItem } from "./types.js";
+import { canExposeResource } from "./resource-capabilities.js";
+import { pruneExposedResourceEntries } from "./resource-state-prune.js";
+import type { ResourceIndex, ResourceItem } from "./types.js";
 import {
 	DEFAULT_RESOURCE_CENTER_SETTINGS,
 	getResourceCenterSettingsPath,
@@ -58,8 +60,29 @@ export async function getExposedResources(_cwd: string): Promise<ExposedResource
 	}
 }
 
+export async function syncPrunedExposedResources(resources: ResourceIndex): Promise<void> {
+	const file = await readResourceCenterSettingsFile();
+	const nextEntries = pruneExposedResourceEntries(file.exposedResources, resources);
+	if (areExposedEntriesEqual(file.exposedResources, nextEntries)) return;
+	await saveResourceCenterSettingsFile({ ...file, exposedResources: nextEntries });
+}
+
+function areExposedEntriesEqual(left: ExposedResourceEntry[] | undefined, right: ExposedResourceEntry[] | undefined): boolean {
+	if ((left?.length ?? 0) !== (right?.length ?? 0)) return false;
+	return (left ?? []).every((entry, index) => {
+		const other = right?.[index];
+		return Boolean(
+			other &&
+			entry.scope === other.scope &&
+			entry.category === other.category &&
+			entry.package === other.package &&
+			entry.path === other.path,
+		);
+	});
+}
+
 export async function setResourceExposed(cwd: string, item: ResourceItem, exposed: boolean): Promise<string> {
-	if (!item.packageSource || item.category === "packages" || item.category === "themes") {
+	if (!canExposeResource(item)) {
 		throw new Error("Only package-contained extensions, skills, and prompts can be exposed");
 	}
 	const entryPath = item.packageRelativePath ?? inferPackageRelativePath(item);

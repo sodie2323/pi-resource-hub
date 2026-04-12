@@ -1,5 +1,6 @@
 import type { ResourceCenterSettings } from "./settings.js";
 import { CATEGORY_LABELS, type PackageContentCategory, type PackageGroupEntry } from "./browser-shared.js";
+import { belongsToPackage } from "./resource-identity.js";
 import type { ResourceCategory, ResourceIndex, ResourceItem } from "./types.js";
 
 export function sortResourceItems(
@@ -66,7 +67,7 @@ export function getPackageContainedItems(
 	getPinnedRank: (item: ResourceItem) => number,
 ): ResourceItem[] {
 	if (pkg.category !== "packages") return [];
-	const items = resources.categories[category].filter((item) => item.packageSource === pkg.source && item.scope === pkg.scope);
+	const items = resources.categories[category].filter((item) => belongsToPackage(item, pkg));
 	return sortResourceItems(items, settings, isPinned, getPinnedRank);
 }
 
