@@ -1,7 +1,10 @@
+/**
+ * browser 子模块共享的常量、类型和辅助函数。
+ */
 import { basename } from "node:path";
 import type { Theme } from "@mariozechner/pi-coding-agent";
-import type { ResourceCenterSettings } from "./settings.js";
-import type { ResourceCategory, ResourceItem } from "./types.js";
+import type { ResourceCenterSettings } from "../settings.js";
+import type { ResourceCategory, ResourceItem } from "../types.js";
 
 export const CATEGORY_ORDER: ResourceCategory[] = ["packages", "skills", "extensions", "prompts", "themes"];
 

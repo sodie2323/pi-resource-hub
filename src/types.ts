@@ -1,3 +1,6 @@
+/**
+ * 资源中心使用的核心领域类型定义。
+ */
 export type ResourceCategory = "packages" | "skills" | "extensions" | "prompts" | "themes";
 
 export type ResourceScope = "project" | "user";

@@ -1,6 +1,9 @@
-import { canExposeResource } from "./resource-capabilities.js";
-import { normalizeConfigPath, type ExposedResourceEntry, type ResourceCenterSettings } from "./settings-shared.js";
-import type { ResourceIndex } from "./types.js";
+/**
+ * 清理已失效的资源中心持久化状态，例如 pinned 和 exposedResources。
+ */
+import { canExposeResource } from "./capabilities.js";
+import { normalizeConfigPath, type ExposedResourceEntry, type ResourceCenterSettings } from "../settings/shared.js";
+import type { ResourceIndex } from "../types.js";
 
 export function prunePinnedResourceIds(settings: ResourceCenterSettings, resources: ResourceIndex): ResourceCenterSettings {
 	const current = settings.pinned ?? [];

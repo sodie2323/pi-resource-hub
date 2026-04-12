@@ -1,7 +1,10 @@
-import { CATEGORY_LABELS, type BrowserMode, type PackageContentCategory, type PackageGroupEntry } from "./browser-shared.js";
-import { formatPackageLabel } from "./browser-shared.js";
-import { isContainedResource, isPackageItem } from "./resource-capabilities.js";
-import type { ResourceCategory, ResourceItem } from "./types.js";
+/**
+ * 浏览器导航相关的纯函数，包括标题、footer、空态文案和选择移动。
+ */
+import { CATEGORY_LABELS, type BrowserMode, type PackageContentCategory, type PackageGroupEntry } from "./shared.js";
+import { formatPackageLabel } from "./shared.js";
+import { isContainedResource, isPackageItem } from "../resource/capabilities.js";
+import type { ResourceCategory, ResourceItem } from "../types.js";
 
 export function moveSelection(current: number, length: number, delta: number): number {
 	return Math.max(0, Math.min(Math.max(0, length - 1), current + delta));

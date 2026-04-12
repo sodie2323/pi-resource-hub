@@ -1,5 +1,8 @@
-import { canRemoveResourceIndividually, isContainedResource, isPackageItem, isThemeItem } from "./resource-capabilities.js";
-import type { ResourceItem } from "./types.js";
+/**
+ * 统一资源操作相关的用户提示文案。
+ */
+import { canRemoveResourceIndividually, isContainedResource, isPackageItem, isThemeItem } from "./capabilities.js";
+import type { ResourceItem } from "../types.js";
 
 export function getRemoveBlockedMessage(item: ResourceItem): string | undefined {
 	if (canRemoveResourceIndividually(item)) return undefined;

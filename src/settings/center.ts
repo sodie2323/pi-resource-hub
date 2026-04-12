@@ -1,8 +1,11 @@
+/**
+ * 资源中心自身设置的读写与维护逻辑。
+ */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { canExposeResource } from "./resource-capabilities.js";
-import { pruneExposedResourceEntries, prunePinnedResourceIds } from "./resource-state-prune.js";
-import type { ResourceIndex, ResourceItem } from "./types.js";
+import { canExposeResource } from "../resource/capabilities.js";
+import { pruneExposedResourceEntries, prunePinnedResourceIds } from "../resource/state-prune.js";
+import type { ResourceIndex, ResourceItem } from "../types.js";
 import {
 	DEFAULT_RESOURCE_CENTER_SETTINGS,
 	getResourceCenterSettingsPath,
@@ -13,7 +16,7 @@ import {
 	type ExposedResourceEntry,
 	type ResourceCenterSettings,
 	type ResourceCenterSettingsFile,
-} from "./settings-shared.js";
+} from "./shared.js";
 
 async function readResourceCenterSettingsFile(): Promise<ResourceCenterSettingsFile> {
 	const path = getResourceCenterSettingsPath();

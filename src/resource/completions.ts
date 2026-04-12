@@ -1,7 +1,10 @@
+/**
+ * /resource 命令参数补全逻辑。
+ */
 import { access, readdir } from "node:fs/promises";
 import { basename, dirname, resolve, sep } from "node:path";
 import { discoverResources } from "./discovery.js";
-import type { ResourceCategory, ResourceItem } from "./types.js";
+import type { ResourceCategory, ResourceItem } from "../types.js";
 
 const ROOT_COMPLETIONS = [
 	{ value: "add ", label: "add", description: "Add a package source to project or user settings" },

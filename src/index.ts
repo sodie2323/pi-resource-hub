@@ -1,8 +1,11 @@
+/**
+ * 插件主入口：注册 /resource 命令并分发子命令。
+ */
 import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
-import { discoverResources } from "./discovery.js";
-import { openResourceBrowser } from "./resource-browser-open.js";
-import { ResourceCompletionProvider } from "./resource-completions.js";
-import { handleAddCommand, handleExposureCommand, handleMutateCommand } from "./resource-commands.js";
+import { discoverResources } from "./resource/discovery.js";
+import { openResourceBrowser } from "./resource/browser-open.js";
+import { ResourceCompletionProvider } from "./resource/completions.js";
+import { handleAddCommand, handleExposureCommand, handleMutateCommand } from "./resource/commands.js";
 import type { ResourceCategory } from "./types.js";
 
 const CATEGORIES: ResourceCategory[] = ["packages", "skills", "extensions", "prompts", "themes"];

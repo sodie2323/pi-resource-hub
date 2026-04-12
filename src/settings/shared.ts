@@ -1,7 +1,10 @@
+/**
+ * settings 子模块共享的类型、路径、通用 helper 与默认值。
+ */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, relative, resolve } from "node:path";
-import type { ResourceCategory, ResourceItem, ResourceScope } from "./types.js";
+import type { ResourceCategory, ResourceItem, ResourceScope } from "../types.js";
 
 interface PackageSourceFilter {
 	source: string;

@@ -1,4 +1,7 @@
-import type { BrowserTheme, DetailAction } from "./browser-shared.js";
+/**
+ * 定义浏览器详情页可用动作，以及对应的文案和提示。
+ */
+import type { BrowserTheme, DetailAction } from "./shared.js";
 import {
 	canExposeResource,
 	canManagePackageContents,
@@ -7,8 +10,8 @@ import {
 	isPackageItem,
 	isThemeItem,
 	supportsPackageUpdate,
-} from "./resource-capabilities.js";
-import type { ResourceItem } from "./types.js";
+} from "../resource/capabilities.js";
+import type { ResourceItem } from "../types.js";
 
 export function getDetailActions(item: ResourceItem): DetailAction[] {
 	if (isPackageItem(item)) return ["manage", "toggle", "pin", "update", "remove", "back"];

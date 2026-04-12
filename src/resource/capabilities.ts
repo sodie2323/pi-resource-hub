@@ -1,4 +1,7 @@
-import { isRemotePackageSource, type PackageResourceItem, type ResourceItem, type ThemeResourceItem } from "./types.js";
+/**
+ * 统一描述不同资源具备哪些能力，例如 expose、remove、update 等。
+ */
+import { isRemotePackageSource, type PackageResourceItem, type ResourceItem, type ThemeResourceItem } from "../types.js";
 
 export function isPackageItem(item: ResourceItem): item is PackageResourceItem {
 	return item.category === "packages";

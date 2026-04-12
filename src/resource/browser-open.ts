@@ -1,7 +1,10 @@
+/**
+ * 负责打开资源浏览器，并把浏览器动作连接到实际资源变更逻辑。
+ */
 import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
-import { ResourceBrowser } from "./browser.js";
+import { ResourceBrowser } from "../browser/browser.js";
 import { discoverResources } from "./discovery.js";
-import { canRemoveResourceIndividually, isPackageItem, isThemeItem, supportsPackageUpdate } from "./resource-capabilities.js";
+import { canRemoveResourceIndividually, isPackageItem, isThemeItem, supportsPackageUpdate } from "./capabilities.js";
 import {
 	getExposeErrorMessage,
 	getExposeSuccessMessage,
@@ -11,9 +14,9 @@ import {
 	getRemoveSuccessMessage,
 	getToggleErrorMessage,
 	getToggleSuccessMessage,
-} from "./resource-messages.js";
-import { readResourceCenterSettings, removeConventionResource, removeResourceFromSettings, saveResourceCenterSettings, setActiveTheme, setResourceExposed, toggleResourceInSettings } from "./settings.js";
-import type { ResourceCategory, ResourceItem } from "./types.js";
+} from "./messages.js";
+import { readResourceCenterSettings, removeConventionResource, removeResourceFromSettings, saveResourceCenterSettings, setActiveTheme, setResourceExposed, toggleResourceInSettings } from "../settings.js";
+import type { ResourceCategory, ResourceItem } from "../types.js";
 
 export async function openResourceBrowser(category: ResourceCategory, ctx: ExtensionCommandContext, pi: ExtensionAPI): Promise<void> {
 	const resources = await discoverResources(ctx.cwd);

@@ -1,7 +1,10 @@
+/**
+ * 对 Pi settings 中资源配置进行增删改切换的逻辑。
+ */
 import { lstat, unlink } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { SettingsManager } from "@mariozechner/pi-coding-agent";
-import type { FileResourceItem, ResourceCategory, ResourceItem } from "./types.js";
+import type { FileResourceItem, ResourceCategory, ResourceItem } from "../types.js";
 import {
 	USER_AGENT_DIR,
 	getProjectSettingsPath,
@@ -15,7 +18,7 @@ import {
 	normalizeFsPath,
 	toErrorMessage,
 	toSettingsPath,
-} from "./settings-shared.js";
+} from "./shared.js";
 
 export async function toggleResourceInSettings(cwd: string, item: ResourceItem): Promise<string> {
 	const settingsPath = item.scope === "project" ? getProjectSettingsPath(cwd) : getUserSettingsPath();

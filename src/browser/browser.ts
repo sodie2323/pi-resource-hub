@@ -1,5 +1,8 @@
+/**
+ * 资源浏览器核心状态容器：负责协调 UI 状态、渲染适配、缓存与回调。
+ */
 import { getSettingsListTheme, type Theme } from "@mariozechner/pi-coding-agent";
-import type { ResourceCenterSettings } from "./settings.js";
+import type { ResourceCenterSettings } from "../settings.js";
 import {
 	type Component,
 	type Focusable,
@@ -22,13 +25,13 @@ import {
 	type PackageContentCategory,
 	type PackageGroupEntry,
 	type SettingsSection,
-} from "./browser-shared.js";
+} from "./shared.js";
 import {
 	buildPackageGroupEntries,
 	getFilteredPackageContainedItems as filterPackageContainedItems,
 	getPackageContainedItems as selectPackageContainedItems,
 	getVisibleCategoryItems as selectVisibleCategoryItems,
-} from "./browser-selectors.js";
+} from "./selectors.js";
 import {
 	renderDescriptionBlock as renderDescriptionBlockView,
 	renderDetailPage as renderDetailPageView,
@@ -43,20 +46,20 @@ import {
 	renderTabs as renderTabsView,
 	renderTopRule as renderTopRuleView,
 	wrapBlock as wrapBlockView,
-} from "./browser-render.js";
-import { getDetailActionHint, getDetailActionLabel, getDetailActions } from "./browser-actions.js";
+} from "./render.js";
+import { getDetailActionHint, getDetailActionLabel, getDetailActions } from "./actions.js";
 import {
 	handleDetailInput as handleDetailInputMode,
 	handleListInput,
 	handlePackageGroupsInput as handlePackageGroupsInputMode,
 	handlePackageItemsInput as handlePackageItemsInputMode,
 	handleSettingsInput as handleSettingsInputMode,
-} from "./browser-input.js";
-import { getDetailFooterText, getEmptyPackageCategoryMessage, getHeaderTitle, getListFooterText, getPackageFooterText, moveSelection } from "./browser-navigation.js";
-import { isContainedResource, isPackageItem, isThemeItem } from "./resource-capabilities.js";
-import { getPackageResourceId, isSameResource } from "./resource-identity.js";
-import { prunePinnedResourceIds } from "./resource-state-prune.js";
-import type { ResourceCategory, ResourceIndex, ResourceItem } from "./types.js";
+} from "./input.js";
+import { getDetailFooterText, getEmptyPackageCategoryMessage, getHeaderTitle, getListFooterText, getPackageFooterText, moveSelection } from "./navigation.js";
+import { isContainedResource, isPackageItem, isThemeItem } from "../resource/capabilities.js";
+import { getPackageResourceId, isSameResource } from "../resource/identity.js";
+import { prunePinnedResourceIds } from "../resource/state-prune.js";
+import type { ResourceCategory, ResourceIndex, ResourceItem } from "../types.js";
 
 export class ResourceBrowser implements Component, Focusable {
 	private readonly theme: Theme;

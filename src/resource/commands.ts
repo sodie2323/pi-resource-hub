@@ -1,17 +1,20 @@
+/**
+ * /resource 子命令处理逻辑。
+ */
 import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 import { discoverResources } from "./discovery.js";
-import { canExposeResource, canRemoveResourceIndividually, isContainedResource, isThemeItem } from "./resource-capabilities.js";
-import { getResourceSearchCandidates } from "./resource-identity.js";
+import { canExposeResource, canRemoveResourceIndividually, isContainedResource, isThemeItem } from "./capabilities.js";
+import { getResourceSearchCandidates } from "./identity.js";
 import {
 	getExposeSuccessMessage,
 	getRemoveBlockedMessage,
 	getRemovedConventionFileMessage,
 	getRemoveSuccessMessage,
 	getToggleSuccessMessage,
-} from "./resource-messages.js";
-import { addPackageToSettings, removeConventionResource, removeResourceFromSettings, setActiveTheme, setResourceExposed, toggleResourceInSettings } from "./settings.js";
-import { normalizeCategoryAlias } from "./resource-completions.js";
-import type { ResourceCategory, ResourceItem } from "./types.js";
+} from "./messages.js";
+import { addPackageToSettings, removeConventionResource, removeResourceFromSettings, setActiveTheme, setResourceExposed, toggleResourceInSettings } from "../settings.js";
+import { normalizeCategoryAlias } from "./completions.js";
+import type { ResourceCategory, ResourceItem } from "../types.js";
 
 export async function handleAddCommand(
 	args: string,

@@ -1,3 +1,6 @@
+/**
+ * 发现并构建资源索引，包括 package、extensions、skills、prompts 和 themes。
+ */
 import { readFile, stat } from "node:fs/promises";
 import { basename, dirname, extname, relative, resolve } from "node:path";
 import {
@@ -7,8 +10,8 @@ import {
 	type ResolvedPaths,
 	type ResolvedResource,
 } from "@mariozechner/pi-coding-agent";
-import { getExposedResources, isPackageSourceEnabled, syncPrunedExposedResources, type PackageSource, USER_AGENT_DIR } from "./settings.js";
-import { getPackageKey, getPackageResourceId } from "./resource-identity.js";
+import { getExposedResources, isPackageSourceEnabled, syncPrunedExposedResources, type PackageSource, USER_AGENT_DIR } from "../settings.js";
+import { getPackageKey, getPackageResourceId } from "./identity.js";
 import type {
 	FileResourceItem,
 	PackageEnabledSummary,
@@ -18,8 +21,8 @@ import type {
 	ResourceItem,
 	ResourceScope,
 	ThemeResourceItem,
-} from "./types.js";
-import { isRemotePackageSource } from "./types.js";
+} from "../types.js";
+import { isRemotePackageSource } from "../types.js";
 
 const RESOURCE_CATEGORIES: ResourceCategory[] = ["packages", "skills", "extensions", "prompts", "themes"];
 

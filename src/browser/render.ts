@@ -1,8 +1,11 @@
+/**
+ * 浏览器各页面的纯渲染函数。
+ */
 import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@mariozechner/pi-tui";
-import type { BrowserTheme, DetailAction, PackageContentCategory, PackageGroupEntry, SettingsSection } from "./browser-shared.js";
-import { CATEGORY_LABELS, CATEGORY_ORDER, SETTINGS_SECTION_LABELS, SETTINGS_SECTION_ORDER, formatPackageLabel } from "./browser-shared.js";
-import { canExposeResource, isContainedResource, isPackageItem } from "./resource-capabilities.js";
-import type { ResourceCategory, ResourceItem } from "./types.js";
+import type { BrowserTheme, DetailAction, PackageContentCategory, PackageGroupEntry, SettingsSection } from "./shared.js";
+import { CATEGORY_LABELS, CATEGORY_ORDER, SETTINGS_SECTION_LABELS, SETTINGS_SECTION_ORDER, formatPackageLabel } from "./shared.js";
+import { canExposeResource, isContainedResource, isPackageItem } from "../resource/capabilities.js";
+import type { ResourceCategory, ResourceItem } from "../types.js";
 
 export function renderHeader(theme: BrowserTheme, width: number, title: string, count: number): string[] {
 	const left = theme.fg("accent", theme.bold(title));

@@ -1,10 +1,13 @@
+/**
+ * 按浏览器 mode 处理键盘输入，负责把输入映射为导航和动作调用。
+ */
 import { getKeybindings, type Input, type SettingsList } from "@mariozechner/pi-tui";
-import { getDetailActions } from "./browser-actions.js";
-import { moveSelection } from "./browser-navigation.js";
-import { canExposeResource, canManagePackageContents, isPackageItem, supportsPackageUpdate } from "./resource-capabilities.js";
-import { getPackageResourceId } from "./resource-identity.js";
-import type { BrowserMode, PackageContentCategory, PackageGroupEntry } from "./browser-shared.js";
-import type { ResourceItem } from "./types.js";
+import { getDetailActions } from "./actions.js";
+import { moveSelection } from "./navigation.js";
+import { canExposeResource, canManagePackageContents, isPackageItem, supportsPackageUpdate } from "../resource/capabilities.js";
+import { getPackageResourceId } from "../resource/identity.js";
+import type { BrowserMode, PackageContentCategory, PackageGroupEntry } from "./shared.js";
+import type { ResourceItem } from "../types.js";
 
 export function handleListInput(data: string, args: {
 	selectedItem?: ResourceItem;

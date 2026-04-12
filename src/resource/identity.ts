@@ -1,4 +1,7 @@
-import { type ResourceItem, type ResourceScope } from "./types.js";
+/**
+ * 统一资源身份与归属判断规则，例如 resource id、package id 与匹配字段。
+ */
+import { type ResourceItem, type ResourceScope } from "../types.js";
 
 export function getPackageKey(scope: ResourceScope, source: string): string {
 	return `${scope}:${source}`;

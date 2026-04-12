@@ -1,7 +1,10 @@
-import type { ResourceCenterSettings } from "./settings.js";
-import { CATEGORY_LABELS, type PackageContentCategory, type PackageGroupEntry } from "./browser-shared.js";
-import { belongsToPackage } from "./resource-identity.js";
-import type { ResourceCategory, ResourceIndex, ResourceItem } from "./types.js";
+/**
+ * 浏览器中的资源筛选、排序与 package 内容选择逻辑。
+ */
+import type { ResourceCenterSettings } from "../settings.js";
+import { CATEGORY_LABELS, type PackageContentCategory, type PackageGroupEntry } from "./shared.js";
+import { belongsToPackage } from "../resource/identity.js";
+import type { ResourceCategory, ResourceIndex, ResourceItem } from "../types.js";
 
 export function sortResourceItems(
 	items: ResourceItem[],
