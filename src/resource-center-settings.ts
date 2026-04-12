@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { canExposeResource } from "./resource-capabilities.js";
-import { pruneExposedResourceEntries } from "./resource-state-prune.js";
+import { pruneExposedResourceEntries, prunePinnedResourceIds } from "./resource-state-prune.js";
 import type { ResourceIndex, ResourceItem } from "./types.js";
 import {
 	DEFAULT_RESOURCE_CENTER_SETTINGS,
@@ -41,14 +41,17 @@ export async function readResourceCenterSettings(): Promise<ResourceCenterSettin
 	return settings;
 }
 
-export async function saveResourceCenterSettings(settings: ResourceCenterSettings): Promise<string> {
-	let exposedResources: ExposedResourceEntry[] | undefined;
+export async function saveResourceCenterSettings(settings: ResourceCenterSettings, resources?: ResourceIndex): Promise<string> {
+	let file: ResourceCenterSettingsFile;
 	try {
-		exposedResources = (await readResourceCenterSettingsFile()).exposedResources;
+		file = await readResourceCenterSettingsFile();
 	} catch {
-		exposedResources = undefined;
+		file = { ...DEFAULT_RESOURCE_CENTER_SETTINGS };
 	}
-	return saveResourceCenterSettingsFile({ ...settings, exposedResources });
+
+	const prunedSettings = resources ? prunePinnedResourceIds(settings, resources) : settings;
+	const exposedResources = resources ? pruneExposedResourceEntries(file.exposedResources, resources) : file.exposedResources;
+	return saveResourceCenterSettingsFile({ ...file, ...prunedSettings, exposedResources });
 }
 
 export async function getExposedResources(_cwd: string): Promise<ExposedResourceEntry[]> {

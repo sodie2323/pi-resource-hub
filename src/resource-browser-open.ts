@@ -153,10 +153,12 @@ export async function openResourceBrowser(category: ResourceCategory, ctx: Exten
 			onUpdate: (item) => void updatePackage(item),
 			onRemove: (item) => void removeItem(item),
 			onSettingsChange: (settings) => {
-				void saveResourceCenterSettings(settings).catch((error: unknown) => {
-					const message = error instanceof Error ? error.message : String(error);
-					ctx.ui.notify(`Failed to save resource center settings: ${message}`, "error");
-				});
+				void discoverResources(ctx.cwd)
+					.then((resources) => saveResourceCenterSettings(settings, resources))
+					.catch((error: unknown) => {
+						const message = error instanceof Error ? error.message : String(error);
+						ctx.ui.notify(`Failed to save resource center settings: ${message}`, "error");
+					});
 			},
 		});
 		return {
