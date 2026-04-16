@@ -6,6 +6,7 @@ import { basename, dirname, extname, relative, resolve } from "node:path";
 import {
 	DefaultPackageManager,
 	SettingsManager,
+	parseFrontmatter,
 	type PathMetadata,
 	type ResolvedPaths,
 	type ResolvedResource,
@@ -42,12 +43,14 @@ const RESOURCE_CATEGORIES: ResourceCategory[] = ["packages", "skills", "extensio
 type DiscoveryCaches = {
 	mtimeByPath: Map<string, number | undefined>;
 	packageDescriptionByPath: Map<string, string | undefined>;
+	skillDescriptionByPath: Map<string, string | undefined>;
 };
 
 export async function discoverResources(cwd: string): Promise<ResourceIndex> {
 	const caches: DiscoveryCaches = {
 		mtimeByPath: new Map(),
 		packageDescriptionByPath: new Map(),
+		skillDescriptionByPath: new Map(),
 	};
 	const settingsManager = SettingsManager.create(cwd, USER_AGENT_DIR);
 	const packageManager = new DefaultPackageManager({ cwd, agentDir: USER_AGENT_DIR, settingsManager });
@@ -194,7 +197,9 @@ async function createFileItem(
 		scope,
 		path: resource.path,
 		source: normalizeSource(resource.metadata),
-		description: buildResourceDescription(category, scope, resource.metadata, resource.path),
+		description: category === "skills"
+			? await readSkillDescription(resource.path, caches) ?? buildResourceDescription(category, scope, resource.metadata, resource.path)
+			: buildResourceDescription(category, scope, resource.metadata, resource.path),
 		enabled: resource.enabled,
 		updatedAt: await safeMtimeMs(resource.path, caches),
 		packageSource,
@@ -259,7 +264,7 @@ async function discoverExternalSkillResources(
 				path: skillPath,
 				source: "plugin",
 				sourceLabel: source.label,
-				description: `Skill resource in user scope, provided by external source ${source.label}. Path: ${skillPath}`,
+				description: await readSkillDescription(skillPath, caches) ?? `Skill resource in user scope, provided by external source ${source.label}. Path: ${skillPath}`,
 				enabled: getPathResourceEnabledState(userSettings, "skills", skillPath) ?? true,
 				updatedAt: await safeMtimeMs(skillPath, caches),
 				managedByPluginSettings: true,
@@ -423,6 +428,22 @@ function inferName(category: Exclude<ResourceCategory, "packages" | "themes">, p
 		}
 	}
 	return basename(path);
+}
+
+async function readSkillDescription(path: string, caches: DiscoveryCaches): Promise<string | undefined> {
+	if (caches.skillDescriptionByPath.has(path)) {
+		return caches.skillDescriptionByPath.get(path);
+	}
+	try {
+		const raw = await readFile(path, "utf8");
+		const { frontmatter } = parseFrontmatter<{ description?: string }>(raw);
+		const description = typeof frontmatter.description === "string" && frontmatter.description.trim() ? frontmatter.description.trim() : undefined;
+		caches.skillDescriptionByPath.set(path, description);
+		return description;
+	} catch {
+		caches.skillDescriptionByPath.set(path, undefined);
+		return undefined;
+	}
 }
 
 function buildResourceDescription(

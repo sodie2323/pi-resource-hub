@@ -7,7 +7,8 @@ import { isContainedResource, isPackageItem } from "../resource/capabilities.js"
 import type { ResourceCategory, ResourceItem } from "../types.js";
 
 export function moveSelection(current: number, length: number, delta: number): number {
-	return Math.max(0, Math.min(Math.max(0, length - 1), current + delta));
+	if (length <= 0) return 0;
+	return (current + delta % length + length) % length;
 }
 
 export function getHeaderTitle(args: {
