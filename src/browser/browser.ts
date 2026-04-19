@@ -125,7 +125,6 @@ export class ResourceBrowser implements Component, Focusable {
 	private addLoading = false;
 	private addLoadingText: string | undefined;
 	private addMessage: { type: "info" | "warning" | "error"; text: string } | undefined;
-	private globalStatus: { type: "info" | "warning" | "error" | "loading"; text: string } | undefined;
 	private addRequestId = 0;
 	private addReturnMode: Exclude<BrowserMode, "add"> = "list";
 	private visibleCategoryItemsCache = new Map<ResourceCategory, ResourceItem[]>();
@@ -268,8 +267,6 @@ export class ResourceBrowser implements Component, Focusable {
 	render(width: number): string[] {
 		const innerWidth = Math.max(1, width - 2);
 		const lines: string[] = [];
-		const globalStatus = this.renderGlobalStatus(width);
-		if (globalStatus) lines.push(globalStatus);
 		lines.push(this.renderTopRule(width));
 		lines.push(...this.wrapBlock(this.renderHeader(innerWidth), width));
 		if (this.mode === "detail") {
@@ -453,19 +450,6 @@ export class ResourceBrowser implements Component, Focusable {
 			lines.push(truncateToWidth(this.theme.fg("warning", this.addDetection.reason), width, "…"));
 		}
 		return lines;
-	}
-
-	private renderGlobalStatus(width: number): string | undefined {
-		if (!this.globalStatus) return undefined;
-		const hasInlineDetailStatus = this.mode === "detail" && (Boolean(this.loadingAction) || Boolean(this.actionMessage));
-		if (hasInlineDetailStatus) return undefined;
-		if (this.globalStatus.type === "loading") {
-			const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-			const frame = frames[this.loadingFrame % frames.length]!;
-			return truncateToWidth(`${this.theme.fg("accent", frame)} ${this.theme.fg("dim", this.globalStatus.text)}`, width, "…");
-		}
-		const color = this.globalStatus.type === "error" ? "error" : this.globalStatus.type === "warning" ? "warning" : "dim";
-		return truncateToWidth(this.theme.fg(color, this.globalStatus.text), width, "…");
 	}
 
 	private renderDetailFooter(width: number): string {
@@ -747,7 +731,6 @@ export class ResourceBrowser implements Component, Focusable {
 		this.loadingAction = action;
 		this.loadingText = text;
 		this.loadingFrame = 0;
-		this.globalStatus = { type: "loading", text };
 		if (this.actionMessage?.action === action) {
 			this.actionMessage = undefined;
 		}
@@ -758,15 +741,6 @@ export class ResourceBrowser implements Component, Focusable {
 			this.loadingAction = undefined;
 			this.loadingText = undefined;
 		}
-	}
-
-	public setGlobalStatus(type: "info" | "warning" | "error" | "loading", text: string | undefined): void {
-		if (!text) {
-			this.globalStatus = undefined;
-			return;
-		}
-		const normalized = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).join(" · ").replace(/\s+/g, " ").trim();
-		this.globalStatus = normalized ? { type, text: normalized } : undefined;
 	}
 
 	private clearTransientActionMessage(): void {
@@ -1169,7 +1143,6 @@ export class ResourceBrowser implements Component, Focusable {
 		this.addLoading = true;
 		this.addLoadingText = `Adding ${request.input}`;
 		this.addMessage = undefined;
-		this.globalStatus = { type: "loading", text: `Adding ${request.input}` };
 		this.loadingFrame = 0;
 		this.callbacks.onRequestRender?.();
 		try {
@@ -1177,7 +1150,6 @@ export class ResourceBrowser implements Component, Focusable {
 			this.addLoading = false;
 			this.addLoadingText = undefined;
 			this.addMessage = undefined;
-			this.globalStatus = undefined;
 			if (this.mode === "add") this.closeAddMode();
 			this.callbacks.onRequestRender?.();
 		} catch (error: unknown) {
@@ -1186,7 +1158,6 @@ export class ResourceBrowser implements Component, Focusable {
 			this.addLoading = false;
 			this.addLoadingText = undefined;
 			this.addMessage = { type: "error", text: normalized };
-			this.globalStatus = undefined;
 			this.callbacks.onRequestRender?.();
 		}
 	}
