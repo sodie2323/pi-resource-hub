@@ -277,6 +277,7 @@ export class ResourceBrowser implements Component, Focusable {
 			lines.push(...this.wrapBlock(this.renderDetailPage(innerWidth), width));
 			lines.push("");
 			lines.push(...this.wrapBlock([this.renderDetailFooter(innerWidth)], width));
+			lines.push(this.renderTopRule(width));
 			return lines;
 		}
 		if (this.mode === "settings") {
@@ -292,6 +293,7 @@ export class ResourceBrowser implements Component, Focusable {
 			lines.push(...this.wrapBlock(this.renderAddPage(innerWidth), width));
 			lines.push("");
 			lines.push(...this.wrapBlock([this.renderAddFooter(innerWidth)], width));
+			lines.push(this.renderTopRule(width));
 			return lines;
 		}
 		if (this.mode === "packageGroups") {
@@ -301,6 +303,7 @@ export class ResourceBrowser implements Component, Focusable {
 			lines.push(...this.wrapBlock(this.renderPackageGroupsPage(innerWidth), width));
 			lines.push("");
 			lines.push(...this.wrapBlock([this.renderPackageFooter(innerWidth)], width));
+			lines.push(this.renderTopRule(width));
 			return lines;
 		}
 		if (this.mode === "packageItems") {
@@ -310,6 +313,7 @@ export class ResourceBrowser implements Component, Focusable {
 			lines.push(...this.wrapBlock(this.renderPackageItemsPage(innerWidth), width));
 			lines.push("");
 			lines.push(...this.wrapBlock([this.renderPackageFooter(innerWidth)], width));
+			lines.push(this.renderTopRule(width));
 			return lines;
 		}
 		lines.push(...this.wrapBlock(this.renderTabs(innerWidth), width));
@@ -319,6 +323,7 @@ export class ResourceBrowser implements Component, Focusable {
 		lines.push(...this.wrapBlock(this.renderList(innerWidth), width));
 		lines.push("");
 		lines.push(...this.wrapBlock([this.renderFooter(innerWidth)], width));
+		lines.push(this.renderTopRule(width));
 		return lines;
 	}
 
