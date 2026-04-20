@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.3] - 2026-04-20
+
+### Changed
+- Local package sources now use shorter `local:<name>` labels in browser lists and detail views instead of full absolute paths.
+- Top-level resources added manually through settings or `/resource add` now use the source label `manual` instead of `settings`.
+
+### Fixed
+- Toggling manually added top-level extension, skill, and other path resources now preserves the plain path entry so the resource stays discoverable while disabled.
+
 ## [0.2.2] - 2026-04-20
 
 ### Added

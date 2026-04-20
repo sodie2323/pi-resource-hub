@@ -1,7 +1,7 @@
 # pi-resource-center
 
 [![npm version](https://img.shields.io/npm/v/pi-resource-center.svg)](https://www.npmjs.com/package/pi-resource-center)
-[![Version](https://img.shields.io/badge/version-0.2.2-blue.svg)](https://github.com/sodie2323/pi-resource-center/releases)
+[![Version](https://img.shields.io/badge/version-0.2.3-blue.svg)](https://github.com/sodie2323/pi-resource-center/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Pi Package](https://img.shields.io/badge/pi-package-purple.svg)](https://github.com/sodie2323/pi-resource-center)
 
@@ -67,6 +67,8 @@ It provides a keyboard-driven TUI resource browser, resource discovery across pr
 - Add and update operations show a live status widget above the editor while work is in progress
 - Package lists and detail views display installed package versions
 - Source labels prefer configured external source names such as Codex or custom source labels when available
+- Local package sources use shorter `local:<name>` labels instead of full absolute paths in the browser
+- Manually added top-level path resources keep a stable on/off state instead of disappearing when toggled
 - Prompt detail views surface frontmatter metadata such as `argument-hint`
 
 ## Quick start
@@ -315,7 +317,7 @@ The package discovers resources in both **project** and **user** scope.
 ### Project scope
 
 - `.pi/settings.json`
-- conventional folders under `.pi/agent/`
+- conventional folders under `.pi/`
   - `extensions/`
   - `skills/`
   - `prompts/`
