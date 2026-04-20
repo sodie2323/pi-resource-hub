@@ -92,14 +92,14 @@ export async function discoverResources(cwd: string): Promise<ResourceIndex> {
 		),
 	]);
 
-	const resolvedSkillItems = await mapResolvedResources("skills", resolvedPaths.skills, exposedResources, caches);
+	const resolvedSkillItems = await mapResolvedResources("skills", resolvedPaths.skills, exposedResources, caches, resourceCenterSettings.externalSkillSources);
 	const externalSkillItems = await discoverExternalSkillResources(resourceCenterSettings.externalSkillSources, userSettingsFile, caches, resolvedSkillItems);
 
 	const categories: ResourceIndex["categories"] = {
 		packages: sortItems([...projectPackages, ...userPackages]),
 		skills: sortItems([...resolvedSkillItems, ...externalSkillItems]),
-		extensions: await mapResolvedResources("extensions", resolvedPaths.extensions, exposedResources, caches),
-		prompts: await mapResolvedResources("prompts", resolvedPaths.prompts, exposedResources, caches),
+		extensions: await mapResolvedResources("extensions", resolvedPaths.extensions, exposedResources, caches, resourceCenterSettings.externalSkillSources),
+		prompts: await mapResolvedResources("prompts", resolvedPaths.prompts, exposedResources, caches, resourceCenterSettings.externalSkillSources),
 		themes: await buildThemeItems(resolvedPaths.themes, selectedTheme, caches),
 	};
 
@@ -153,11 +153,12 @@ async function mapResolvedResources<TCategory extends Exclude<ResourceCategory, 
 	resources: ResolvedResource[],
 	exposedResources: Array<{ scope: ResourceScope; category: Exclude<ResourceCategory, "packages" | "themes">; package: string; path: string }>,
 	caches: DiscoveryCaches,
+	configuredSources: ExternalSkillSourceSetting[],
 ): Promise<FileResourceItem[]> {
 	const items = await Promise.all(
 		resources
 			.filter((resource) => isSupportedScope(resource.metadata.scope))
-			.map((resource) => createFileItem(category, resource, exposedResources, caches)),
+			.map((resource) => createFileItem(category, resource, exposedResources, caches, configuredSources)),
 	);
 	return sortItems(items);
 }
@@ -191,6 +192,7 @@ async function createFileItem(
 	resource: ResolvedResource,
 	exposedResources: Array<{ scope: ResourceScope; category: Exclude<ResourceCategory, "packages" | "themes">; package: string; path: string }>,
 	caches: DiscoveryCaches,
+	configuredSources: ExternalSkillSourceSetting[],
 ): Promise<FileResourceItem> {
 	const scope = resource.metadata.scope;
 	if (!isSupportedScope(scope)) {
@@ -200,7 +202,7 @@ async function createFileItem(
 	const packageSource = resource.metadata.origin === "package" ? resource.metadata.source : undefined;
 	const packageRelativePath = getRelativeResourcePath(resource);
 	const promptMetadata = category === "prompts" ? await readPromptMetadata(resource.path, caches) : undefined;
-	const sourceLabel = !packageSource ? inferConfiguredSourceLabel(resource.path) : undefined;
+	const sourceLabel = !packageSource ? inferConfiguredSourceLabel(resource.path, configuredSources) : undefined;
 	return {
 		category,
 		id: `${category}:${scope}:${resource.metadata.origin}:${resource.metadata.source}:${resource.path}`,
@@ -447,8 +449,12 @@ function normalizeConfigPath(value: string): string {
 	return value.replace(/^[+\-!]/, "").replace(/\\/g, "/");
 }
 
-function inferConfiguredSourceLabel(path: string): string | undefined {
+function inferConfiguredSourceLabel(path: string, configuredSources: ExternalSkillSourceSetting[]): string | undefined {
 	const normalizedPath = normalizeConfigPath(path).toLowerCase();
+	for (const source of configuredSources) {
+		const rootPath = normalizeConfigPath(resolveHomePath(source.path)).toLowerCase();
+		if (normalizedPath === rootPath || normalizedPath.startsWith(`${rootPath}/`)) return source.label;
+	}
 	for (const source of DEFAULT_EXTERNAL_SKILL_SOURCES) {
 		const rootPath = normalizeConfigPath(resolveHomePath(source.path)).toLowerCase();
 		if (normalizedPath === rootPath || normalizedPath.startsWith(`${rootPath}/`)) return source.label;
