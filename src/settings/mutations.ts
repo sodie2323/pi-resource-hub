@@ -147,7 +147,7 @@ function togglePathResource(settingsManager: SettingsManager, scope: "project" |
 	const filtered = current.filter((entry) => normalizeFsPath(resolve(settingsDir, normalizeConfigPath(entry))) !== normalizedPath);
 	const relativePath = toSettingsPath(item.path, settingsDir);
 
-	if (item.source === "settings") {
+	if (item.source === "manual") {
 		// Explicit top-level path entries are only discovered from plain paths. A lone +path/-path
 		// override does not reintroduce the file into discovery, so keep the plain path and only add
 		// a force-exclude override when disabled.

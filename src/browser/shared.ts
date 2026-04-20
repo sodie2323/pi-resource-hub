@@ -65,6 +65,12 @@ export function formatPackageLabel(source: string): string {
 	return `local:${basename(source.replace(/[\\/]+$/, "")) || source}`;
 }
 
+export function formatResourceSourceLabel(item: ResourceItem): string {
+	if (item.packageSource) return formatPackageLabel(item.packageSource);
+	if (item.category === "packages") return formatPackageLabel(item.source);
+	return item.sourceLabel ?? item.source;
+}
+
 export type PackageGroupEntry =
 	| { kind: "category"; category: PackageContentCategory }
 	| { kind: "item"; category: PackageContentCategory; item: ResourceItem }

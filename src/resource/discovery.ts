@@ -464,7 +464,7 @@ function inferConfiguredSourceLabel(path: string, configuredSources: ExternalSki
 
 function normalizeSource(metadata: PathMetadata): string {
 	if (metadata.origin === "package") return metadata.source;
-	return metadata.source === "auto" ? "convention" : "settings";
+	return metadata.source === "auto" ? "convention" : "manual";
 }
 
 function isSupportedScope(scope: PathMetadata["scope"]): scope is ResourceScope {

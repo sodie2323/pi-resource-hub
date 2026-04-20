@@ -3,7 +3,7 @@
  */
 import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@mariozechner/pi-tui";
 import type { BrowserTheme, DetailAction, PackageContentCategory, PackageGroupEntry, SettingsSection } from "./shared.js";
-import { CATEGORY_LABELS, CATEGORY_ORDER, SETTINGS_SECTION_LABELS, SETTINGS_SECTION_ORDER, formatPackageLabel } from "./shared.js";
+import { CATEGORY_LABELS, CATEGORY_ORDER, SETTINGS_SECTION_LABELS, SETTINGS_SECTION_ORDER, formatResourceSourceLabel } from "./shared.js";
 import { canExposeResource, isContainedResource, isPackageItem } from "../resource/capabilities.js";
 import type { ResourceCategory, ResourceItem } from "../types.js";
 
@@ -68,11 +68,11 @@ export function renderListPage(args: {
 		const pinBadge = isPinned(item) ? theme.fg("accent", "[pin] ") : "";
 		const packageBadge = isContainedResource(item) ? theme.fg("accent", theme.bold("[pkg] ")) : "";
 		const packageVersion = isPackageItem(item) && item.version ? theme.fg("dim", ` @${item.version}`) : "";
-		const nameText = `${pinBadge}${packageBadge}${item.name}${packageVersion}`;
+		const displayName = isPackageItem(item) ? formatResourceSourceLabel(item) : item.name;
+		const nameText = `${pinBadge}${packageBadge}${displayName}${packageVersion}`;
 		const name = selected ? theme.bold(nameText) : theme.fg("text", nameText);
 		const scope = item.scope === "project" ? theme.fg("success", "project") : theme.fg("warning", "user");
-		const sourceValue = item.packageSource ?? item.sourceLabel ?? item.source;
-		const source = theme.fg("dim", item.packageSource ? formatPackageLabel(sourceValue) : sourceValue);
+		const source = theme.fg("dim", formatResourceSourceLabel(item));
 		const right = `${scope}  ${source}`;
 		const left = `${marker} ${toggle} ${name}`;
 		const spacing = Math.max(1, width - visibleWidth(left) - visibleWidth(right));
@@ -134,7 +134,7 @@ export function renderDetailPage(args: {
 		: item.enabled
 			? theme.fg("success", "on")
 			: theme.fg("dim", "off");
-	const sourceText = item.packageSource ?? item.sourceLabel ?? item.source;
+	const sourceText = formatResourceSourceLabel(item);
 	const pathText = isPackageItem(item) ? item.installPath : "path" in item ? item.path : undefined;
 	const pinnedText = isPinned(item) ? theme.fg("accent", "[pin]") : theme.fg("dim", "no");
 	const lines = [
@@ -142,7 +142,7 @@ export function renderDetailPage(args: {
 		truncateToWidth(`${theme.fg("muted", "Enabled")}: ${enabledText}`, width, "…"),
 		truncateToWidth(`${theme.fg("muted", "Pinned")}: ${pinnedText}`, width, "…"),
 		truncateToWidth(`${theme.fg("muted", "Scope")}: ${item.scope}`, width, "…"),
-		truncateToWidth(`${theme.fg("muted", "Name")}: ${item.name}`, width, "…"),
+		truncateToWidth(`${theme.fg("muted", "Name")}: ${isPackageItem(item) ? formatResourceSourceLabel(item) : item.name}`, width, "…"),
 		...(item.category === "prompts" && "argumentHint" in item && item.argumentHint
 			? [truncateToWidth(`${theme.fg("muted", "Argument Hint")}: ${item.argumentHint}`, width, "…")]
 			: []),
