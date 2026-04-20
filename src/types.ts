@@ -31,6 +31,7 @@ export interface PackageResourceItem {
 	counts?: PackageResourceCounts;
 	enabledSummary?: PackageEnabledSummary;
 	installPath?: string;
+	version?: string;
 	packageSource?: string;
 	packageRelativePath?: string;
 	exposed?: boolean;

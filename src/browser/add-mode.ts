@@ -28,12 +28,17 @@ export function createInitialAddModeState(scope: "project" | "user", returnMode:
 }
 
 export function renderAddPage(theme: Theme, width: number, input: Input, state: AddModeState): string[] {
-	const scopeLabel = state.scope === "project"
+	const scopeValue = state.scope === "project"
 		? theme.fg("success", "project")
 		: theme.fg("warning", "user");
+	const sourceInput = input.render(Math.max(1, width - 8))[0] ?? "";
+	const sourcePrefix = sourceInput.replace(/\s+$/u, "");
+	const sourceLine = input.getValue().trim()
+		? `${theme.fg("dim", "Source:")} ${sourceInput}`
+		: `${theme.fg("dim", "Source:")} ${sourcePrefix}${theme.fg("dim", " npm:, git:, https://github.com/..., ./local-path")}`;
 	const lines = [
-		truncateToWidth(`Scope: ${scopeLabel}  ${theme.fg("dim", "(Tab to switch)")}`, width, "…"),
-		truncateToWidth(`Source: ${input.render(Math.max(1, width - 8))[0] ?? ""}`, width, "…"),
+		truncateToWidth(`${theme.fg("dim", "Scope:")} ${scopeValue}  ${theme.fg("dim", "(Tab to switch)")}`, width, "…"),
+		truncateToWidth(sourceLine, width, "…"),
 	];
 	if (input.getValue().trim() && state.suggestions.length > 0 && !state.loading) {
 		lines.push("");
@@ -45,20 +50,12 @@ export function renderAddPage(theme: Theme, width: number, input: Input, state: 
 			lines.push(truncateToWidth(`${prefix}${label}${description}`, width, "…"));
 		}
 	}
-	lines.push("");
-	if (state.detection.kind === "package") {
-		lines.push(truncateToWidth(theme.fg("success", `Detected: package · ${state.detection.description}`), width, "…"));
-	} else if (state.detection.kind === "path") {
-		lines.push(truncateToWidth(theme.fg("success", `Detected: ${formatAddCategoryLabel(state.detection.category)} · ${state.detection.description}`), width, "…"));
-	} else if (state.detection.kind === "ambiguous") {
-		lines.push(truncateToWidth(theme.fg("warning", state.detection.description), width, "…"));
+	if (state.detection.kind === "ambiguous") {
 		lines.push("");
 		for (const [index, candidate] of state.detection.candidates.entries()) {
 			const prefix = index === state.selectedCandidateIndex ? theme.fg("accent", "> ") : "  ";
 			lines.push(truncateToWidth(`${prefix}${formatAddCategoryLabel(candidate)}`, width, "…"));
 		}
-	} else {
-		lines.push(truncateToWidth(theme.fg("warning", state.detection.reason), width, "…"));
 	}
 	return lines;
 }

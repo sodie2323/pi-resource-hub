@@ -67,7 +67,8 @@ export function renderListPage(args: {
 		const toggle = isPackageItem(item) ? formatPackageToggleState(item) : formatBinaryToggle(item.enabled, true);
 		const pinBadge = isPinned(item) ? theme.fg("accent", "[pin] ") : "";
 		const packageBadge = isContainedResource(item) ? theme.fg("accent", theme.bold("[pkg] ")) : "";
-		const nameText = `${pinBadge}${packageBadge}${item.name}`;
+		const packageVersion = isPackageItem(item) && item.version ? theme.fg("dim", ` @${item.version}`) : "";
+		const nameText = `${pinBadge}${packageBadge}${item.name}${packageVersion}`;
 		const name = selected ? theme.bold(nameText) : theme.fg("text", nameText);
 		const scope = item.scope === "project" ? theme.fg("success", "project") : theme.fg("warning", "user");
 		const sourceValue = item.packageSource ?? item.sourceLabel ?? item.source;
@@ -154,6 +155,7 @@ export function renderDetailPage(args: {
 			: []),
 	];
 	if (isPackageItem(item)) {
+		if (item.version) lines.push(truncateToWidth(`${theme.fg("muted", "Version")}: ${item.version}`, width, "…"));
 		const enabledSummary = formatPackageEnabledSummary(item);
 		if (enabledSummary) lines.push(truncateToWidth(`${theme.fg("muted", "Enabled Resources")}: ${enabledSummary}`, width, "…"));
 		const counts = formatPackageCounts(item, true);

@@ -64,6 +64,7 @@ export async function discoverResources(cwd: string): Promise<ResourceIndex> {
 	const packageEnabledCounts = buildPackageEnabledSummaryMap(resolvedPaths, selectedTheme);
 	const packageDescriptions = await buildPackageDescriptionMap(resolvedPaths, caches);
 	const packageInstallPaths = buildPackageInstallPathMap(resolvedPaths);
+	const packageVersions = await buildPackageVersionMap(resolvedPaths, packageInstallPaths, caches);
 	const exposedResources = await getExposedResources(cwd);
 	const resourceCenterSettings = await readResourceCenterSettings();
 	const userSettingsFile = await readSettingsFile(getUserSettingsPath());
@@ -75,6 +76,7 @@ export async function discoverResources(cwd: string): Promise<ResourceIndex> {
 			packageEnabledCounts,
 			packageDescriptions,
 			packageInstallPaths,
+			packageVersions,
 			caches,
 		),
 		buildPackageItems(
@@ -84,6 +86,7 @@ export async function discoverResources(cwd: string): Promise<ResourceIndex> {
 			packageEnabledCounts,
 			packageDescriptions,
 			packageInstallPaths,
+			packageVersions,
 			caches,
 		),
 	]);
@@ -111,6 +114,7 @@ async function buildPackageItems(
 	enabledSummaries: Map<string, PackageEnabledSummary>,
 	packageDescriptions: Map<string, string>,
 	packageInstallPaths: Map<string, string>,
+	packageVersions: Map<string, string>,
 	caches: DiscoveryCaches,
 ): Promise<ResourceItem[]> {
 	const items = await Promise.all(
@@ -121,6 +125,7 @@ async function buildPackageItems(
 			const enabledSummary = enabledSummaries.get(packageKey);
 			const packageDescription = packageDescriptions.get(packageKey);
 			const installPath = packageInstallPaths.get(packageKey);
+			const version = packageVersions.get(packageKey);
 			return {
 				category: "packages" as const,
 				id: getPackageResourceId(scope, spec),
@@ -135,6 +140,7 @@ async function buildPackageItems(
 				counts: packageCounts,
 				enabledSummary,
 				installPath,
+				version,
 			};
 		}),
 	);
@@ -388,6 +394,21 @@ async function buildPackageDescriptionMap(resolvedPaths: ResolvedPaths, caches: 
 	return descriptions;
 }
 
+async function buildPackageVersionMap(
+	resolvedPaths: ResolvedPaths,
+	packageInstallPaths: Map<string, string>,
+	caches: DiscoveryCaches,
+): Promise<Map<string, string>> {
+	const versions = new Map<string, string>();
+	await Promise.all(
+		Array.from(packageInstallPaths.entries()).map(async ([key, installPath]) => {
+			const version = await readPackageVersion(resolve(installPath, "package.json"), caches);
+			if (version) versions.set(key, version);
+		}),
+	);
+	return versions;
+}
+
 async function readPackageDescription(packageJsonPath: string, caches: DiscoveryCaches): Promise<string | undefined> {
 	if (caches.packageDescriptionByPath.has(packageJsonPath)) {
 		return caches.packageDescriptionByPath.get(packageJsonPath);
@@ -400,6 +421,16 @@ async function readPackageDescription(packageJsonPath: string, caches: Discovery
 		return description;
 	} catch {
 		caches.packageDescriptionByPath.set(packageJsonPath, undefined);
+		return undefined;
+	}
+}
+
+async function readPackageVersion(packageJsonPath: string, caches: DiscoveryCaches): Promise<string | undefined> {
+	try {
+		const raw = await readFile(packageJsonPath, "utf8");
+		const parsed = JSON.parse(raw) as { version?: unknown };
+		return typeof parsed.version === "string" && parsed.version.trim() ? parsed.version.trim() : undefined;
+	} catch {
 		return undefined;
 	}
 }
