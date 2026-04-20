@@ -143,10 +143,21 @@ function togglePackage(settingsManager: SettingsManager, scope: "project" | "use
 function togglePathResource(settingsManager: SettingsManager, scope: "project" | "user", category: Exclude<ResourceCategory, "packages" | "themes">, item: FileResourceItem, settingsDir: string): void {
 	const settings = scope === "project" ? settingsManager.getProjectSettings() : settingsManager.getGlobalSettings();
 	const current = [...(settings[category] ?? [])];
-	const normalizedPath = normalizeFsPath(resolve(settingsDir, normalizeConfigPath(item.path)));
+	const normalizedPath = normalizeFsPath(resolve(item.path));
 	const filtered = current.filter((entry) => normalizeFsPath(resolve(settingsDir, normalizeConfigPath(entry))) !== normalizedPath);
 	const relativePath = toSettingsPath(item.path, settingsDir);
-	filtered.push(item.enabled ? `+${relativePath}` : `-${relativePath}`);
+
+	if (item.source === "settings") {
+		// Explicit top-level path entries are only discovered from plain paths. A lone +path/-path
+		// override does not reintroduce the file into discovery, so keep the plain path and only add
+		// a force-exclude override when disabled.
+		filtered.push(relativePath);
+		if (!item.enabled) filtered.push(`-${relativePath}`);
+	} else {
+		// Convention/auto-discovered resources are discovered independently, so +/- overrides work.
+		filtered.push(item.enabled ? `+${relativePath}` : `-${relativePath}`);
+	}
+
 	setPathEntriesForScope(settingsManager, scope, category, filtered);
 }
 
