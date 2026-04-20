@@ -1,7 +1,7 @@
 # pi-resource-center
 
 [![npm version](https://img.shields.io/npm/v/pi-resource-center.svg)](https://www.npmjs.com/package/pi-resource-center)
-[![Version](https://img.shields.io/badge/version-0.2.1-blue.svg)](https://github.com/sodie2323/pi-resource-center/releases)
+[![Version](https://img.shields.io/badge/version-0.2.2-blue.svg)](https://github.com/sodie2323/pi-resource-center/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Pi Package](https://img.shields.io/badge/pi-package-purple.svg)](https://github.com/sodie2323/pi-resource-center)
 
@@ -37,6 +37,7 @@ It provides a keyboard-driven TUI resource browser, resource discovery across pr
 - [TUI controls](#tui-controls)
   - [Browser view](#browser-view)
   - [Detail view](#detail-view)
+  - [Add view](#add-view)
   - [Settings view](#settings-view)
 - [Plugin settings](#plugin-settings)
 - [Discovery model](#discovery-model)
@@ -56,12 +57,16 @@ It provides a keyboard-driven TUI resource browser, resource discovery across pr
 - Pin resources to keep them at the top of sorted lists
 - Apply built-in and custom themes from the browser or command line
 - Remove configured resources from settings
-- Add package sources via `/resource add ...`
+- Add package sources and local resources via `/resource add ...`
 - Update remote packages directly from the browser
 - Argument completions for `/resource` subcommands
 - Built-in settings UI (`Shift+S`) with persistent preferences
 - External skill source management for Claude, Codex, OpenCode, and multiple custom directories
 - Inline integrations editing with keyboard shortcuts for add/remove and quick on/off toggling
+- Add view defaults scope from the current context and offers inline source suggestions for local paths, npm, git, and GitHub URLs
+- Add and update operations show a live status widget above the editor while work is in progress
+- Package lists and detail views display installed package versions
+- Source labels prefer configured external source names such as Codex or custom source labels when available
 - Prompt detail views surface frontmatter metadata such as `argument-hint`
 
 ## Quick start
@@ -154,6 +159,14 @@ If you update the local package after installing it, run:
 - `sync` — re-run discovery and refresh the current resource index
 
 ### Add a package source or local resource
+
+The browser `A` flow and `/resource add` both support:
+
+- remote package sources such as `npm:`, `git:`, and full GitHub URLs
+- local package directories
+- local extensions, skills, prompts, and themes
+
+In the browser Add view, the default scope now follows the current selection context instead of always defaulting to project scope.
 
 ```bash
 /resource add <source-or-path>
@@ -254,6 +267,19 @@ Pinned resources are kept at the top of sorted lists.
 For packages, the detail view includes a **Manage Resources** action that opens the package contents view, where you can browse contained extensions, skills, prompts, and themes, search within the package, and manage them directly.
 
 For package-contained extensions, skills, and prompts, the detail view also includes a **Show in Category** / **Hide from Category** action.
+
+### Add view
+
+Open from browser or detail views with `A`.
+
+- Default scope follows the current resource context (`project` or `user`)
+- `Tab` — switch scope
+- Type to enter a source or local path
+- Inline suggestions appear for local paths and common source prefixes
+- `Up/Down` — choose a suggestion or disambiguation candidate
+- `Enter` — accept the selected suggestion or add the current source
+- Long-running add/install operations show a widget above the editor and continue even if you leave the Resource Center view
+- `Esc` — close the Add view
 
 ### Settings view
 

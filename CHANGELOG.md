@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.2] - 2026-04-20
+
+### Added
+- Added a dedicated Add view with inline source suggestions for local paths, `npm:`, `git:`, and full GitHub URLs.
+- Added above-editor operation status widgets for add and update flows so long-running package installs and updates stay visible outside the Resource Center view.
+- Added installed package version display in package lists and package detail views.
+
+### Changed
+- Add view now defaults its scope from the current resource context instead of always starting at project scope.
+- Package add operations now run through the Pi CLI install flow so npm output is captured more cleanly and behaves consistently with package updates.
+- Resource source labels now prefer configured external source names, including custom source labels, when paths match configured source roots.
+- Simplified Add view copy and removed low-value detection/status text to keep focus on the input field.
+- Refactored Add view state/suggestions and resource operation status handling into dedicated modules to reduce browser coupling.
+- Reduced duplication in add target detection logic by consolidating shared sync/async path handling helpers.
+
+### Fixed
+- Add view now supports `S` to open settings consistently with other browser modes.
+- Accepting an Add suggestion now places the cursor at the end of the accepted value.
+- Detail action result messages no longer leak across resources when switching to a different detail view.
+- Footer framing now keeps action hints visually inside the browser frame.
+- Configured Codex and other external resource directories now show their configured source labels instead of a generic `settings` source.
+
 ## [0.2.1] - 2026-04-18
 
 ### Added
