@@ -1025,11 +1025,6 @@ export class ResourceBrowser implements Component, Focusable {
 		}
 		if (kb.matches(data, "tui.select.confirm")) {
 			const request = this.addInput.getValue().trim();
-			const selectedSuggestion = this.addState.suggestions[this.addState.selectedSuggestionIndex];
-			if (selectedSuggestion && selectedSuggestion.value !== request) {
-				this.acceptAddSuggestion();
-				return;
-			}
 			if (!request) return;
 			if (this.addState.detection.kind === "package" || this.addState.detection.kind === "path") {
 				void this.submitAddRequest({ input: request, scope: this.addState.scope });
@@ -1037,6 +1032,11 @@ export class ResourceBrowser implements Component, Focusable {
 			}
 			if (this.addState.detection.kind === "ambiguous") {
 				void this.submitAddRequest({ input: request, scope: this.addState.scope, preferredCategory: this.addState.detection.candidates[this.addState.selectedCandidateIndex] });
+				return;
+			}
+			const selectedSuggestion = this.addState.suggestions[this.addState.selectedSuggestionIndex];
+			if (selectedSuggestion && selectedSuggestion.value !== request) {
+				this.acceptAddSuggestion();
 			}
 			return;
 		}

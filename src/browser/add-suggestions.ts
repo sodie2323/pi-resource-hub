@@ -1,5 +1,6 @@
 import { access, readdir } from "node:fs/promises";
 import { basename, dirname, resolve, sep } from "node:path";
+import { detectAddTargetSync } from "../resource/add-detect.js";
 
 export type AddSuggestion = { value: string; label: string; description?: string };
 
@@ -20,6 +21,8 @@ export async function getAddSuggestions(input: string, cwd: string): Promise<Add
 	const value = input.trim();
 	if (!value) return [];
 	if (isLikelyLocalPathInput(value)) {
+		const detected = detectAddTargetSync(value, cwd);
+		if (detected.kind === "package" || detected.kind === "path") return [];
 		const pathSuggestions = await getLocalAddPathSuggestions(value, cwd);
 		if (pathSuggestions.length > 0) return pathSuggestions;
 	}

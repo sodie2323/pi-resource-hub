@@ -2,7 +2,7 @@
  * 对 Pi settings 中资源配置进行增删改切换的逻辑。
  */
 import { lstat, unlink } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import { SettingsManager } from "@mariozechner/pi-coding-agent";
 import type { FileResourceItem, ResourceCategory, ResourceItem } from "../types.js";
 import type { AddPathCategory } from "../resource/add-detect.js";
@@ -100,14 +100,93 @@ export async function addPackageToSettings(cwd: string, source: string, scope: "
 	try {
 		const settings = scope === "project" ? settingsManager.getProjectSettings() : settingsManager.getGlobalSettings();
 		const packages = [...(settings.packages ?? [])] as PackageSource[];
-		const index = packages.findIndex((entry) => (typeof entry === "string" ? entry : entry.source) === source);
-		if (index === -1) packages.push(source); else packages[index] = source;
+		const normalizedSource = normalizePackageSourceForSettings(source, dirname(settingsPath));
+		const index = packages.findIndex((entry) => packageSourcesMatch(entry, source, dirname(settingsPath)));
+		if (index === -1) packages.push(normalizedSource); else packages[index] = normalizedSource;
 		setPackagesForScope(settingsManager, scope, packages);
 		await settingsManager.flush();
 		return settingsPath;
 	} catch (error: unknown) {
 		throw new Error(`Failed to add package source ${source} to ${scope} scope via ${settingsPath}: ${toErrorMessage(error)}`);
 	}
+}
+
+function packageSourcesMatch(existing: PackageSource, inputSource: string, settingsDir: string): boolean {
+	const left = getPackageSourceMatchKey(typeof existing === "string" ? existing : existing.source, settingsDir);
+	const right = getPackageSourceMatchKey(inputSource, settingsDir);
+	return left === right;
+}
+
+function getPackageSourceMatchKey(source: string, settingsDir: string): string {
+	const parsed = parsePackageSource(source);
+	if (parsed.type === "npm") return `npm:${parsed.name}`;
+	if (parsed.type === "git") return `git:${parsed.host}/${parsed.path}`;
+	return `local:${normalizeFsPath(resolve(settingsDir, parsed.path))}`;
+}
+
+function normalizePackageSourceForSettings(source: string, settingsDir: string): string {
+	const parsed = parsePackageSource(source);
+	if (parsed.type === "local") {
+		const resolvedPath = resolve(settingsDir, parsed.path);
+		const relativePath = relative(settingsDir, resolvedPath);
+		const settingsValue = relativePath && !relativePath.startsWith("..") ? relativePath : resolvedPath;
+		return settingsValue.replace(/\\/g, "/");
+	}
+	return source;
+}
+
+function parsePackageSource(source: string):
+	| { type: "npm"; name: string }
+	| { type: "git"; host: string; path: string }
+	| { type: "local"; path: string } {
+	const trimmed = source.trim();
+	if (trimmed.startsWith("npm:")) {
+		return { type: "npm", name: parseNpmPackageName(trimmed.slice("npm:".length)) };
+	}
+	const gitSource = parseGitPackageSource(trimmed);
+	if (gitSource) return gitSource;
+	return { type: "local", path: trimmed };
+}
+
+function parseNpmPackageName(spec: string): string {
+	const trimmed = spec.trim();
+	const match = trimmed.match(/^(?<name>@[^@\s]+\/[^@\s]+|[^@\s]+)(?:@.+)?$/);
+	return match?.groups?.name ?? trimmed;
+}
+
+function parseGitPackageSource(source: string): { type: "git"; host: string; path: string } | undefined {
+	const trimmed = source.trim();
+	const withoutPrefix = trimmed.startsWith("git:") ? trimmed.slice(4) : trimmed;
+	const sshLike = withoutPrefix.match(/^(?:ssh:\/\/)?git@(?<host>[^/:]+)[:/](?<path>.+?)(?:@[^/]+)?$/);
+	if (sshLike?.groups?.host && sshLike.groups.path) {
+		return {
+			type: "git",
+			host: sshLike.groups.host.toLowerCase(),
+			path: normalizeGitRepoPath(sshLike.groups.path),
+		};
+	}
+	const urlLike = withoutPrefix.match(/^(?<protocol>https?|ssh|git):\/\/(?:(?<user>[^@/]+)@)?(?<host>[^/]+)\/(?<path>.+)$/);
+	if (urlLike?.groups?.host && urlLike.groups.path) {
+		return {
+			type: "git",
+			host: urlLike.groups.host.toLowerCase(),
+			path: normalizeGitRepoPath(urlLike.groups.path),
+		};
+	}
+	const shorthand = withoutPrefix.match(/^(?<host>github\.com|gitlab\.com|bitbucket\.org)\/(?<path>.+?)(?:@[^/]+)?$/i);
+	if (shorthand?.groups?.host && shorthand.groups.path) {
+		return {
+			type: "git",
+			host: shorthand.groups.host.toLowerCase(),
+			path: normalizeGitRepoPath(shorthand.groups.path),
+		};
+	}
+	return undefined;
+}
+
+function normalizeGitRepoPath(value: string): string {
+	const withoutRef = value.replace(/@[^/]+$/, "");
+	return withoutRef.replace(/\.git$/i, "").replace(/^\/+|\/+$/g, "").toLowerCase();
 }
 
 export async function addPathResourceToSettings(cwd: string, category: AddPathCategory, path: string, scope: "project" | "user" = "project"): Promise<string> {
