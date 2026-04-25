@@ -165,7 +165,7 @@ export async function syncExternalSkillSourcesToPiSettings(
 		// Codex cache version changes cannot leave stale Pi skill entries behind.
 		if (next && isCodexPluginSource(next)) {
 			for (const cleanupPath of await getExternalSkillSourceCleanupPaths(next)) {
-				removeManagedExternalSkillSourceEntries(nextSkills, settingsFile.dir, cleanupPath, true);
+				removeManagedExternalSkillSourceEntries(nextSkills, settingsFile.dir, cleanupPath, true, true);
 			}
 		}
 
@@ -338,7 +338,13 @@ function upsertExternalSkillSourceRoot(entries: string[], settingsDir: string, s
 	entries.splice(0, entries.length, ...nextEntries);
 }
 
-function removeManagedExternalSkillSourceEntries(entries: string[], settingsDir: string, resolvedSourcePath: string, removePlainDescendants = false): void {
+function removeManagedExternalSkillSourceEntries(
+	entries: string[],
+	settingsDir: string,
+	resolvedSourcePath: string,
+	removePlainDescendants = false,
+	preserveExplicitOverrides = false,
+): void {
 	const normalizedRoot = normalizeAbsolutePath(resolvedSourcePath);
 	const nextEntries = entries.filter((entry) => {
 		const resolvedEntryPath = resolveSettingsEntryPath(settingsDir, entry);
@@ -346,6 +352,7 @@ function removeManagedExternalSkillSourceEntries(entries: string[], settingsDir:
 		const normalizedEntryPath = normalizeAbsolutePath(resolvedEntryPath);
 		if (!(normalizedEntryPath === normalizedRoot || normalizedEntryPath.startsWith(`${normalizedRoot}/`))) return true;
 		const isExplicitOverride = entry.startsWith("+") || entry.startsWith("-") || entry.startsWith("!");
+		if (isExplicitOverride && preserveExplicitOverrides) return true;
 		const isRootEntry = normalizedEntryPath === normalizedRoot;
 		const isPlainDescendant = normalizedEntryPath.startsWith(`${normalizedRoot}/`) && !isExplicitOverride;
 		return !(isExplicitOverride || isRootEntry || (removePlainDescendants && isPlainDescendant));

@@ -2,7 +2,7 @@
  * 浏览器中的资源筛选、排序与 package 内容选择逻辑。
  */
 import type { ResourceCenterSettings } from "../settings.js";
-import { CATEGORY_LABELS, type PackageContentCategory, type PackageGroupEntry } from "./shared.js";
+import { CATEGORY_LABELS, type BrowserListEntry, type PackageContentCategory, type PackageGroupEntry } from "./shared.js";
 import { belongsToPackage } from "../resource/identity.js";
 import type { ResourceCategory, ResourceIndex, ResourceItem } from "../types.js";
 
@@ -101,6 +101,72 @@ export function buildPackageGroupEntries(
 		}
 		if (items.length > previewLimit) {
 			entries.push({ kind: "more", category, remaining: items.length - previewLimit });
+		}
+	}
+	return entries;
+}
+
+export function buildBrowserListEntries(
+	category: ResourceCategory,
+	items: ResourceItem[],
+	expandedPluginGroupIds: Set<string>,
+	allItems: ResourceItem[] = items,
+): BrowserListEntry[] {
+	if (category !== "skills") {
+		return items.map((item) => ({ kind: "resource", item }));
+	}
+
+	const pluginItemsById = new Map<string, ResourceItem[]>();
+	for (const item of allItems) {
+		const pluginId = "externalPluginId" in item ? item.externalPluginId : undefined;
+		const pluginName = "externalPluginName" in item ? item.externalPluginName : undefined;
+		if (!pluginId || !pluginName) continue;
+		const current = pluginItemsById.get(pluginId) ?? [];
+		current.push(item);
+		pluginItemsById.set(pluginId, current);
+	}
+	const visiblePluginItemsById = new Map<string, ResourceItem[]>();
+	for (const item of items) {
+		const pluginId = "externalPluginId" in item ? item.externalPluginId : undefined;
+		const pluginName = "externalPluginName" in item ? item.externalPluginName : undefined;
+		if (!pluginId || !pluginName) continue;
+		const current = visiblePluginItemsById.get(pluginId) ?? [];
+		current.push(item);
+		visiblePluginItemsById.set(pluginId, current);
+	}
+
+	const emittedPluginGroups = new Set<string>();
+	const entries: BrowserListEntry[] = [];
+	for (const item of items) {
+		const pluginId = "externalPluginId" in item ? item.externalPluginId : undefined;
+		const pluginName = "externalPluginName" in item ? item.externalPluginName : undefined;
+		const pluginItems = pluginId ? pluginItemsById.get(pluginId) : undefined;
+		const visiblePluginItems = pluginId ? visiblePluginItemsById.get(pluginId) : undefined;
+		if (!pluginId || !pluginName || !pluginItems || !visiblePluginItems || pluginItems.length <= 1) {
+			entries.push({ kind: "resource", item });
+			continue;
+		}
+		if (emittedPluginGroups.has(pluginId)) continue;
+		emittedPluginGroups.add(pluginId);
+		const expanded = expandedPluginGroupIds.has(pluginId);
+		entries.push({
+			kind: "plugin-group",
+			pluginId,
+			pluginName,
+			scope: item.scope,
+			sourceLabel: "Codex Plugins",
+			items: pluginItems,
+			enabledCount: pluginItems.filter((entry) => entry.enabled).length,
+			totalCount: pluginItems.length,
+			expanded,
+			updatedAt: pluginItems.reduce<number | undefined>((latest, entry) => {
+				if (entry.updatedAt === undefined) return latest;
+				return latest === undefined ? entry.updatedAt : Math.max(latest, entry.updatedAt);
+			}, undefined),
+		});
+		if (!expanded) continue;
+		for (const pluginItem of visiblePluginItems) {
+			entries.push({ kind: "plugin-child", pluginId, item: pluginItem });
 		}
 	}
 	return entries;

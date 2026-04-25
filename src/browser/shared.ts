@@ -5,7 +5,7 @@ import { basename } from "node:path";
 import type { Theme } from "@mariozechner/pi-coding-agent";
 import type { AddPathCategory } from "../resource/add-detect.js";
 import type { ResourceCenterSettings } from "../settings.js";
-import type { ResourceCategory, ResourceItem } from "../types.js";
+import type { ResourceCategory, ResourceItem, ResourceScope } from "../types.js";
 
 export const CATEGORY_ORDER: ResourceCategory[] = ["packages", "skills", "extensions", "prompts", "themes"];
 
@@ -76,6 +76,22 @@ export type PackageGroupEntry =
 	| { kind: "item"; category: PackageContentCategory; item: ResourceItem }
 	| { kind: "more"; category: PackageContentCategory; remaining: number };
 
+export type BrowserListEntry =
+	| { kind: "resource"; item: ResourceItem }
+	| {
+			kind: "plugin-group";
+			pluginId: string;
+			pluginName: string;
+			scope: ResourceScope;
+			sourceLabel: string;
+			items: ResourceItem[];
+			enabledCount: number;
+			totalCount: number;
+			expanded: boolean;
+			updatedAt?: number;
+	  }
+	| { kind: "plugin-child"; pluginId: string; item: ResourceItem };
+
 export interface AddResourceRequest {
 	input: string;
 	scope: "project" | "user";
@@ -86,6 +102,7 @@ export interface BrowserCallbacks {
 	onClose: () => void | Promise<void>;
 	onInspect?: (item: ResourceItem) => void;
 	onToggle?: (item: ResourceItem) => void;
+	onToggleGroup?: (items: ResourceItem[], enabled: boolean, label: string) => void | Promise<void>;
 	onExpose?: (item: ResourceItem) => void;
 	onUpdate?: (item: ResourceItem) => void;
 	onRemove?: (item: ResourceItem) => void;

@@ -118,6 +118,27 @@ export async function openResourceBrowser(category: ResourceCategory, ctx: Exten
 				setActionMessage("toggle", "error", getToggleErrorMessage(item, error));
 			}
 		};
+		const toggleGroup = async (items: ResourceItem[], enabled: boolean, label: string) => {
+			const previousStates = items.map((item) => ({ item, enabled: item.enabled }));
+			try {
+				let settingsPath: string | undefined;
+				let changedCount = 0;
+				for (const item of items) {
+					if (item.enabled === enabled) continue;
+					item.enabled = enabled;
+					settingsPath = await toggleResourceInSettings(ctx.cwd, item);
+					changedCount += 1;
+				}
+				hasPendingChanges = true;
+				await refreshBrowser();
+				setActionMessage("toggle", "info", `${enabled ? "Enabled" : "Disabled"} ${changedCount} skills in ${label}${settingsPath ? ` · ${settingsPath}` : ""}`);
+			} catch (error: unknown) {
+				for (const state of previousStates) state.item.enabled = state.enabled;
+				await refreshBrowser();
+				const message = error instanceof Error ? error.message : String(error);
+				setActionMessage("toggle", "error", `Failed to update ${label}: ${message}`);
+			}
+		};
 		const exposeItem = async (item: ResourceItem) => {
 			try {
 				const statePath = await setResourceExposed(ctx.cwd, item, Boolean(item.exposed));
@@ -187,6 +208,7 @@ export async function openResourceBrowser(category: ResourceCategory, ctx: Exten
 			onClose: closeBrowser,
 			onInspect: undefined,
 			onToggle: (item) => void toggleItem(item),
+			onToggleGroup: (items, enabled, label) => void toggleGroup(items, enabled, label),
 			onExpose: (item) => void exposeItem(item),
 			onUpdate: (item) => void updatePackage(item),
 			onRemove: (item) => void removeItem(item),

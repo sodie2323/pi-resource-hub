@@ -27,6 +27,7 @@ import {
 	reloadBehaviorFromLabel,
 	sortModeFromLabel,
 	type BrowserCallbacks,
+	type BrowserListEntry,
 	type BrowserMode,
 	type DetailAction,
 	type PackageContentCategory,
@@ -34,6 +35,7 @@ import {
 	type SettingsSection,
 } from "./shared.js";
 import {
+	buildBrowserListEntries,
 	buildPackageGroupEntries,
 	getFilteredPackageContainedItems as filterPackageContainedItems,
 	getPackageContainedItems as selectPackageContainedItems,
@@ -89,7 +91,7 @@ export class ResourceBrowser implements Component, Focusable {
 	private readonly resources: ResourceIndex;
 	private settings: ResourceCenterSettings;
 	private category: ResourceCategory;
-	private filteredItems: ResourceItem[] = [];
+	private filteredListEntries: BrowserListEntry[] = [];
 	private selectedIndex = 0;
 	private maxVisible = 8;
 	private mode: BrowserMode = "list";
@@ -124,6 +126,7 @@ export class ResourceBrowser implements Component, Focusable {
 		| undefined;
 	private confirmingRemove = false;
 	private actionMessage: { action: DetailAction; type: "info" | "warning" | "error"; text: string } | undefined;
+	private expandedPluginGroupIds = new Set<string>();
 	private loadingAction: DetailAction | undefined;
 	private loadingText: string | undefined;
 	private loadingFrame = 0;
@@ -232,7 +235,7 @@ export class ResourceBrowser implements Component, Focusable {
 		}
 
 		handleListInput(data, {
-			selectedItem: this.filteredItems[this.selectedIndex],
+			selectedEntry: this.filteredListEntries[this.selectedIndex],
 			maxVisible: this.maxVisible,
 			onOpenSettings: () => this.openSettings(),
 			onClose: () => this.callbacks.onClose(),
@@ -241,6 +244,7 @@ export class ResourceBrowser implements Component, Focusable {
 			onOpenSelectedItem: () => this.openSelectedItem(),
 			onTogglePinned: (item) => this.togglePinned(item),
 			onToggleItem: (item) => this.toggleItem(item),
+			onToggleGroup: (items, enabled, label) => this.togglePluginGroup(items, enabled, label),
 			onAddResource: () => this.openAddMode(),
 			searchInput: this.mainSearchInput,
 			onApplyFilter: () => this.applyFilter(),
@@ -317,7 +321,7 @@ export class ResourceBrowser implements Component, Focusable {
 					? this.packageContentsItems.length
 					: this.mode === "packageGroups"
 						? this.getPackageGroupEntries().length
-						: this.filteredItems.length;
+						: this.filteredListEntries.length;
 		return renderHeaderView(this.theme, width, this.getHeaderTitle(), count);
 	}
 
@@ -341,7 +345,7 @@ export class ResourceBrowser implements Component, Focusable {
 		return renderListPageView({
 			theme: this.theme,
 			width,
-			items: this.filteredItems,
+			entries: this.filteredListEntries,
 			selectedIndex: this.selectedIndex,
 			maxVisible: this.maxVisible,
 			isPinned: (item) => this.isPinned(item),
@@ -396,7 +400,11 @@ export class ResourceBrowser implements Component, Focusable {
 	}
 
 	private renderFooter(width: number): string {
-		const selectedCategory = this.filteredItems[this.selectedIndex]?.category ?? this.category;
+		const selectedEntry = this.filteredListEntries[this.selectedIndex];
+		if (selectedEntry?.kind === "plugin-group") {
+			return this.renderFooterWithSettingsHint(width, "Space toggle all · Enter expand/collapse · A add · Esc close");
+		}
+		const selectedCategory = this.getSelectedResource()?.category ?? this.category;
 		return this.renderFooterWithSettingsHint(width, getListFooterText(selectedCategory));
 	}
 
@@ -739,7 +747,7 @@ export class ResourceBrowser implements Component, Focusable {
 			this.refreshPackageContentsItems();
 		}
 		this.applyFilter();
-		this.selectedIndex = Math.max(0, Math.min(this.selectedIndex, this.filteredItems.length - 1));
+		this.selectedIndex = Math.max(0, Math.min(this.selectedIndex, this.filteredListEntries.length - 1));
 	}
 
 	public removeItem(item: ResourceItem): void {
@@ -751,7 +759,7 @@ export class ResourceBrowser implements Component, Focusable {
 		this.invalidateItemCaches(item);
 		this.exitDetailMode();
 		this.applyFilter();
-		this.selectedIndex = Math.max(0, Math.min(this.selectedIndex, this.filteredItems.length - 1));
+		this.selectedIndex = Math.max(0, Math.min(this.selectedIndex, this.filteredListEntries.length - 1));
 	}
 
 	private exitDetailMode(): void {
@@ -763,13 +771,17 @@ export class ResourceBrowser implements Component, Focusable {
 	}
 
 	private moveListSelection(delta: number): void {
-		this.selectedIndex = moveSelection(this.selectedIndex, this.filteredItems.length, delta);
+		this.selectedIndex = moveSelection(this.selectedIndex, this.filteredListEntries.length, delta);
 	}
 
 	private openSelectedItem(): void {
-		const selected = this.filteredItems[this.selectedIndex];
+		const selected = this.filteredListEntries[this.selectedIndex];
 		if (!selected) return;
-		this.openDetailItem(selected, "list");
+		if (selected.kind === "plugin-group") {
+			this.togglePluginGroupExpanded(selected.pluginId);
+			return;
+		}
+		this.openDetailItem(selected.item, "list");
 	}
 
 	private openDetailItem(item: ResourceItem, returnMode: Exclude<BrowserMode, "detail">): void {
@@ -791,6 +803,23 @@ export class ResourceBrowser implements Component, Focusable {
 		this.mode = "packageGroups";
 	}
 
+	private getEntryResource(entry: BrowserListEntry | undefined): ResourceItem | undefined {
+		if (!entry || entry.kind === "plugin-group") return undefined;
+		return entry.item;
+	}
+
+	private getSelectedResource(): ResourceItem | undefined {
+		return this.getEntryResource(this.filteredListEntries[this.selectedIndex]);
+	}
+
+	private togglePluginGroupExpanded(pluginId: string): void {
+		if (this.expandedPluginGroupIds.has(pluginId)) this.expandedPluginGroupIds.delete(pluginId); else this.expandedPluginGroupIds.add(pluginId);
+		this.applyFilter();
+	}
+
+	private togglePluginGroup(items: ResourceItem[], enabled: boolean, label: string): void {
+		this.callbacks.onToggleGroup?.(items, enabled, label);
+	}
 
 	private moveCategory(direction: 1 | -1): void {
 		const index = CATEGORY_ORDER.indexOf(this.category);
@@ -803,8 +832,9 @@ export class ResourceBrowser implements Component, Focusable {
 	private applyFilter(): void {
 		const query = this.mainSearchInput.getValue().trim().toLowerCase();
 		const items = this.getVisibleCategoryItems(this.category);
-		this.filteredItems = items.filter((item) => this.matchesResourceQuery(item, query));
-		this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, this.filteredItems.length - 1));
+		const filteredItems = items.filter((item) => this.matchesResourceQuery(item, query));
+		this.filteredListEntries = buildBrowserListEntries(this.category, filteredItems, this.expandedPluginGroupIds, items);
+		this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, this.filteredListEntries.length - 1));
 	}
 
 	private rebuildPinnedRank(): void {
@@ -828,7 +858,14 @@ export class ResourceBrowser implements Component, Focusable {
 		this.searchTextCache.clear();
 		for (const category of CATEGORY_ORDER) {
 			for (const item of this.resources.categories[category]) {
-				const base = [item.name, item.source, item.packageSource ?? "", item.packageRelativePath ?? ""]
+				const base = [
+					item.name,
+					item.source,
+					item.sourceLabel ?? "",
+					"externalPluginName" in item ? item.externalPluginName ?? "" : "",
+					item.packageSource ?? "",
+					item.packageRelativePath ?? "",
+				]
 					.join(" ")
 					.toLowerCase();
 				const pathText = "path" in item && item.path ? item.path.toLowerCase() : "";
@@ -896,13 +933,13 @@ export class ResourceBrowser implements Component, Focusable {
 
 			// Keep the main list consistent for when the user returns.
 			this.applyFilter();
-			const listIndex = this.filteredItems.findIndex((candidate) => candidate.id === item.id);
+			const listIndex = this.filteredListEntries.findIndex((candidate) => this.getEntryResource(candidate)?.id === item.id);
 			if (listIndex !== -1) this.selectedIndex = listIndex;
 			return;
 		}
 
 		this.applyFilter();
-		const nextIndex = this.filteredItems.findIndex((candidate) => candidate.id === item.id);
+		const nextIndex = this.filteredListEntries.findIndex((candidate) => this.getEntryResource(candidate)?.id === item.id);
 		if (nextIndex !== -1) this.selectedIndex = nextIndex;
 	}
 
@@ -990,7 +1027,7 @@ export class ResourceBrowser implements Component, Focusable {
 	private getCurrentAddScopeContext(): "project" | "user" {
 		if (this.mode === "detail" && this.detailItem) return this.detailItem.scope;
 		if ((this.mode === "packageGroups" || this.mode === "packageItems") && this.packageItem?.category === "packages") return this.packageItem.scope;
-		const selectedItem = this.filteredItems[this.selectedIndex];
+		const selectedItem = this.getSelectedResource();
 		return selectedItem?.scope ?? "project";
 	}
 

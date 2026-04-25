@@ -50,6 +50,8 @@ export interface FileResourceItem {
 	enabled: boolean;
 	managedByPluginSettings?: boolean;
 	externalSourceId?: string;
+	externalPluginId?: string;
+	externalPluginName?: string;
 	/** Unix epoch millis for "last updated" sorting (best-effort). */
 	updatedAt?: number;
 	packageSource?: string;

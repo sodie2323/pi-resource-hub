@@ -2,7 +2,7 @@
  * 浏览器各页面的纯渲染函数。
  */
 import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@mariozechner/pi-tui";
-import type { BrowserTheme, DetailAction, PackageContentCategory, PackageGroupEntry, SettingsSection } from "./shared.js";
+import type { BrowserListEntry, BrowserTheme, DetailAction, PackageContentCategory, PackageGroupEntry, SettingsSection } from "./shared.js";
 import { CATEGORY_LABELS, CATEGORY_ORDER, SETTINGS_SECTION_LABELS, SETTINGS_SECTION_ORDER, formatResourceSourceLabel } from "./shared.js";
 import { canExposeResource, isContainedResource, isPackageItem } from "../resource/capabilities.js";
 import type { ResourceCategory, ResourceItem } from "../types.js";
@@ -44,50 +44,69 @@ export function renderSearch(
 export function renderListPage(args: {
 	theme: BrowserTheme;
 	width: number;
-	items: ResourceItem[];
+	entries: BrowserListEntry[];
 	selectedIndex: number;
 	maxVisible: number;
 	isPinned: (item: ResourceItem) => boolean;
 	formatPackageToggleState: (item: ResourceItem) => string;
 	formatBinaryToggle: (enabled: boolean, bold?: boolean) => string;
 }): string[] {
-	const { theme, width, items, selectedIndex, maxVisible, isPinned, formatPackageToggleState, formatBinaryToggle } = args;
-	if (items.length === 0) {
+	const { theme, width, entries, selectedIndex, maxVisible, isPinned, formatPackageToggleState, formatBinaryToggle } = args;
+	if (entries.length === 0) {
 		return [theme.fg("muted", "  Nothing matches the current view")];
 	}
 
-	const startIndex = Math.max(0, Math.min(selectedIndex - Math.floor(maxVisible / 2), items.length - maxVisible));
-	const endIndex = Math.min(items.length, startIndex + maxVisible);
+	const startIndex = Math.max(0, Math.min(selectedIndex - Math.floor(maxVisible / 2), entries.length - maxVisible));
+	const endIndex = Math.min(entries.length, startIndex + maxVisible);
 	const lines: string[] = [];
 
 	for (let index = startIndex; index < endIndex; index++) {
-		const item = items[index]!;
+		const entry = entries[index]!;
 		const selected = index === selectedIndex;
 		const marker = selected ? theme.fg("accent", "▌") : theme.fg("dim", " ");
+		if (entry.kind === "plugin-group") {
+			const toggle = theme.fg(
+				entry.enabledCount === 0 ? "dim" : entry.enabledCount === entry.totalCount ? "success" : "warning",
+				theme.bold(`[${entry.enabledCount}/${entry.totalCount}]`),
+			);
+			const disclosure = theme.fg("muted", entry.expanded ? "▾" : "▸");
+			const name = selected ? theme.bold(entry.pluginName) : theme.fg("text", entry.pluginName);
+			const scope = entry.scope === "project" ? theme.fg("success", "project") : theme.fg("warning", "user");
+			const source = theme.fg("dim", entry.sourceLabel);
+			const right = `${scope}  ${source}`;
+			const left = `${marker} ${toggle} ${disclosure} ${name}`;
+			const spacing = Math.max(1, width - visibleWidth(left) - visibleWidth(right));
+			let line = truncateToWidth(`${left}${" ".repeat(spacing)}${right}`, width, "…");
+			line = selected ? theme.bg("selectedBg", line) : theme.fg("text", line);
+			lines.push(line);
+			continue;
+		}
+		const item = entry.item;
 		const toggle = isPackageItem(item) ? formatPackageToggleState(item) : formatBinaryToggle(item.enabled, true);
 		const pinBadge = isPinned(item) ? theme.fg("accent", "[pin] ") : "";
 		const packageBadge = isContainedResource(item) ? theme.fg("accent", theme.bold("[pkg] ")) : "";
 		const packageVersion = isPackageItem(item) && item.version ? theme.fg("dim", ` @${item.version}`) : "";
 		const displayName = isPackageItem(item) ? formatResourceSourceLabel(item) : item.name;
-		const nameText = `${pinBadge}${packageBadge}${displayName}${packageVersion}`;
+		const childIndent = entry.kind === "plugin-child" ? theme.fg("dim", "   ↳ ") : "";
+		const nameText = `${childIndent}${pinBadge}${packageBadge}${displayName}${packageVersion}`;
 		const name = selected ? theme.bold(nameText) : theme.fg("text", nameText);
-		const scope = item.scope === "project" ? theme.fg("success", "project") : theme.fg("warning", "user");
-		const source = theme.fg("dim", formatResourceSourceLabel(item));
-		const right = `${scope}  ${source}`;
+		const right = entry.kind === "plugin-child"
+			? ""
+			: `${item.scope === "project" ? theme.fg("success", "project") : theme.fg("warning", "user")}  ${theme.fg("dim", formatResourceSourceLabel(item))}`;
 		const left = `${marker} ${toggle} ${name}`;
-		const spacing = Math.max(1, width - visibleWidth(left) - visibleWidth(right));
-		let line = truncateToWidth(`${left}${" ".repeat(spacing)}${right}`, width, "…");
+		const spacing = right ? Math.max(1, width - visibleWidth(left) - visibleWidth(right)) : 0;
+		let line = truncateToWidth(right ? `${left}${" ".repeat(spacing)}${right}` : left, width, "…");
 		line = selected ? theme.bg("selectedBg", line) : theme.fg("text", line);
 		lines.push(line);
 
-		const nextItem = index + 1 < endIndex ? items[index + 1] : undefined;
-		if (isPackageItem(item) && nextItem && !isPackageItem(nextItem)) {
+		const nextEntry = index + 1 < endIndex ? entries[index + 1] : undefined;
+		if (entry.kind === "resource" && isPackageItem(item) && nextEntry?.kind === "resource" && !isPackageItem(nextEntry.item)) {
 			lines.push(theme.fg("dim", ""));
 		}
 	}
 
-	if (startIndex > 0 || endIndex < items.length) {
-		lines.push(theme.fg("dim", truncateToWidth(`(${selectedIndex + 1}/${items.length})`, width, "")));
+	if (startIndex > 0 || endIndex < entries.length) {
+		lines.push(theme.fg("dim", truncateToWidth(`(${selectedIndex + 1}/${entries.length})`, width, "")));
 	}
 
 	return lines;

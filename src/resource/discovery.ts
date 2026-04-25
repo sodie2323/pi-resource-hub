@@ -49,6 +49,13 @@ type DiscoveryCaches = {
 	promptMetadataByPath: Map<string, { description?: string; argumentHint?: string }>;
 };
 
+type ExternalPluginOwner = {
+	externalSourceId: string;
+	externalPluginId: string;
+	externalPluginName: string;
+	skillsRoot: string;
+};
+
 export async function discoverResources(cwd: string): Promise<ResourceIndex> {
 	const caches: DiscoveryCaches = {
 		mtimeByPath: new Map(),
@@ -71,6 +78,7 @@ export async function discoverResources(cwd: string): Promise<ResourceIndex> {
 	const packageVersions = await buildPackageVersionMap(resolvedPaths, packageInstallPaths, caches);
 	const exposedResources = await getExposedResources(cwd);
 	const userSettingsFile = await readSettingsFile(getUserSettingsPath());
+	const externalPluginOwners = await collectExternalPluginOwners(resourceCenterSettings.externalSkillSources);
 	const [projectPackages, userPackages] = await Promise.all([
 		buildPackageItems(
 			(projectSettings.packages ?? []) as PackageSource[],
@@ -94,14 +102,14 @@ export async function discoverResources(cwd: string): Promise<ResourceIndex> {
 		),
 	]);
 
-	const resolvedSkillItems = await mapResolvedResources("skills", resolvedPaths.skills, exposedResources, caches, resourceCenterSettings.externalSkillSources);
+	const resolvedSkillItems = await mapResolvedResources("skills", resolvedPaths.skills, exposedResources, caches, resourceCenterSettings.externalSkillSources, externalPluginOwners);
 	const externalSkillItems = await discoverExternalSkillResources(resourceCenterSettings.externalSkillSources, userSettingsFile, caches, resolvedSkillItems);
 
 	const categories: ResourceIndex["categories"] = {
 		packages: sortItems([...projectPackages, ...userPackages]),
 		skills: sortItems([...resolvedSkillItems, ...externalSkillItems]),
-		extensions: await mapResolvedResources("extensions", resolvedPaths.extensions, exposedResources, caches, resourceCenterSettings.externalSkillSources),
-		prompts: await mapResolvedResources("prompts", resolvedPaths.prompts, exposedResources, caches, resourceCenterSettings.externalSkillSources),
+		extensions: await mapResolvedResources("extensions", resolvedPaths.extensions, exposedResources, caches, resourceCenterSettings.externalSkillSources, externalPluginOwners),
+		prompts: await mapResolvedResources("prompts", resolvedPaths.prompts, exposedResources, caches, resourceCenterSettings.externalSkillSources, externalPluginOwners),
 		themes: await buildThemeItems(resolvedPaths.themes, selectedTheme, caches),
 	};
 
@@ -156,11 +164,12 @@ async function mapResolvedResources<TCategory extends Exclude<ResourceCategory, 
 	exposedResources: Array<{ scope: ResourceScope; category: Exclude<ResourceCategory, "packages" | "themes">; package: string; path: string }>,
 	caches: DiscoveryCaches,
 	configuredSources: ExternalSkillSourceSetting[],
+	externalPluginOwners: ExternalPluginOwner[],
 ): Promise<FileResourceItem[]> {
 	const items = await Promise.all(
 		resources
 			.filter((resource) => isSupportedScope(resource.metadata.scope))
-			.map((resource) => createFileItem(category, resource, exposedResources, caches, configuredSources)),
+			.map((resource) => createFileItem(category, resource, exposedResources, caches, configuredSources, externalPluginOwners)),
 	);
 	return sortItems(items);
 }
@@ -195,6 +204,7 @@ async function createFileItem(
 	exposedResources: Array<{ scope: ResourceScope; category: Exclude<ResourceCategory, "packages" | "themes">; package: string; path: string }>,
 	caches: DiscoveryCaches,
 	configuredSources: ExternalSkillSourceSetting[],
+	externalPluginOwners: ExternalPluginOwner[],
 ): Promise<FileResourceItem> {
 	const scope = resource.metadata.scope;
 	if (!isSupportedScope(scope)) {
@@ -204,7 +214,10 @@ async function createFileItem(
 	const packageSource = resource.metadata.origin === "package" ? resource.metadata.source : undefined;
 	const packageRelativePath = getRelativeResourcePath(resource);
 	const promptMetadata = category === "prompts" ? await readPromptMetadata(resource.path, caches) : undefined;
-	const sourceLabel = !packageSource ? inferConfiguredSourceLabel(resource.path, configuredSources) : undefined;
+	const pluginOwner = category === "skills" ? inferExternalPluginOwner(resource.path, externalPluginOwners) : undefined;
+	const sourceLabel = pluginOwner
+		? `Codex Plugins:${pluginOwner.externalPluginName}`
+		: (!packageSource ? inferConfiguredSourceLabel(resource.path, configuredSources) : undefined);
 	return {
 		category,
 		id: `${category}:${scope}:${resource.metadata.origin}:${resource.metadata.source}:${resource.path}`,
@@ -221,6 +234,10 @@ async function createFileItem(
 		argumentHint: category === "prompts" ? promptMetadata?.argumentHint : undefined,
 		enabled: resource.enabled,
 		updatedAt: await safeMtimeMs(resource.path, caches),
+		managedByPluginSettings: Boolean(pluginOwner),
+		externalSourceId: pluginOwner?.externalSourceId,
+		externalPluginId: pluginOwner?.externalPluginId,
+		externalPluginName: pluginOwner?.externalPluginName,
 		packageSource,
 		packageRelativePath,
 		exposed: Boolean(
@@ -259,6 +276,38 @@ async function createThemeItem(resource: ResolvedResource, selectedTheme: string
 	};
 }
 
+async function collectExternalPluginOwners(sources: ExternalSkillSourceSetting[]): Promise<ExternalPluginOwner[]> {
+	const owners: ExternalPluginOwner[] = [];
+	for (const source of sources) {
+		if (!source.enabled) continue;
+		if (source.integration !== "codex-plugin-cache" && source.id !== "codex-plugins") continue;
+		const pluginJsonPaths = await collectCodexPluginManifests(resolveHomePath(source.path));
+		for (const pluginJsonPath of pluginJsonPaths) {
+			const plugin = await readCodexPluginManifest(pluginJsonPath);
+			if (!plugin || plugin.hasApps) continue;
+			const pluginRoot = dirname(dirname(pluginJsonPath));
+			const skillsRoot = resolve(pluginRoot, plugin.skillsPath ?? "skills");
+			const skillPaths = await collectSkillPaths(skillsRoot);
+			if (skillPaths.length === 0) continue;
+			owners.push({
+				externalSourceId: source.id,
+				externalPluginId: pluginRoot,
+				externalPluginName: plugin.displayName || plugin.name || basename(pluginRoot),
+				skillsRoot,
+			});
+		}
+	}
+	return owners;
+}
+
+function inferExternalPluginOwner(path: string, owners: ExternalPluginOwner[]): ExternalPluginOwner | undefined {
+	const normalizedPath = normalizeConfigPath(path).toLowerCase();
+	return owners.find((owner) => {
+		const rootPath = normalizeConfigPath(owner.skillsRoot).toLowerCase();
+		return normalizedPath === rootPath || normalizedPath.startsWith(`${rootPath}/`);
+	});
+}
+
 async function discoverExternalSkillResources(
 	sources: ExternalSkillSourceSetting[],
 	userSettings: SettingsFile | undefined,
@@ -289,33 +338,54 @@ async function discoverExternalSkillResources(
 				updatedAt: await safeMtimeMs(skillPath, caches),
 				managedByPluginSettings: true,
 				externalSourceId: source.id,
+				externalPluginId: discoveredSkill.externalPluginId,
+				externalPluginName: discoveredSkill.externalPluginName,
 			});
 		}
 	}
 	return items;
 }
 
-async function discoverExternalSkillSourceSkills(source: ExternalSkillSourceSetting): Promise<Array<{ path: string; sourceLabel?: string; description?: string }>> {
+async function discoverExternalSkillSourceSkills(source: ExternalSkillSourceSetting): Promise<Array<{
+	path: string;
+	sourceLabel?: string;
+	description?: string;
+	externalPluginId?: string;
+	externalPluginName?: string;
+}>> {
 	if (source.integration !== "codex-plugin-cache" && source.id !== "codex-plugins") {
 		return (await collectSkillPaths(resolveHomePath(source.path))).map((path) => ({ path }));
 	}
 	return discoverCodexPluginSkills(resolveHomePath(source.path), source.label);
 }
 
-async function discoverCodexPluginSkills(cacheRoot: string, sourceLabel: string): Promise<Array<{ path: string; sourceLabel?: string; description?: string }>> {
+async function discoverCodexPluginSkills(cacheRoot: string, _sourceLabel: string): Promise<Array<{
+	path: string;
+	sourceLabel?: string;
+	description?: string;
+	externalPluginId?: string;
+	externalPluginName?: string;
+}>> {
 	const pluginJsonPaths = await collectCodexPluginManifests(cacheRoot);
-	const skills: Array<{ path: string; sourceLabel?: string; description?: string }> = [];
+	const skills: Array<{
+		path: string;
+		sourceLabel?: string;
+		description?: string;
+		externalPluginId?: string;
+		externalPluginName?: string;
+	}> = [];
 	for (const pluginJsonPath of pluginJsonPaths) {
 		const plugin = await readCodexPluginManifest(pluginJsonPath);
 		if (!plugin || plugin.hasApps) continue;
 		const pluginRoot = dirname(dirname(pluginJsonPath));
 		const skillsRoot = resolve(pluginRoot, plugin.skillsPath ?? "skills");
 		const pluginLabel = plugin.displayName || plugin.name || basename(pluginRoot);
-		const label = `${sourceLabel}: ${pluginLabel}`;
 		for (const path of await collectSkillPaths(skillsRoot)) {
 			skills.push({
 				path,
-				sourceLabel: label,
+				sourceLabel: `Codex Plugins:${pluginLabel}`,
+				externalPluginId: pluginRoot,
+				externalPluginName: pluginLabel,
 				description: plugin.shortDescription || plugin.description
 					? `Codex plugin skill from ${pluginLabel}. ${plugin.shortDescription ?? plugin.description}`
 					: `Codex plugin skill from ${pluginLabel}.`,

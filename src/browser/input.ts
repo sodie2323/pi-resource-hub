@@ -6,11 +6,11 @@ import { getDetailActions } from "./actions.js";
 import { moveSelection } from "./navigation.js";
 import { canExposeResource, canManagePackageContents, isPackageItem, supportsPackageUpdate } from "../resource/capabilities.js";
 import { getPackageResourceId } from "../resource/identity.js";
-import type { BrowserMode, PackageContentCategory, PackageGroupEntry } from "./shared.js";
+import type { BrowserListEntry, BrowserMode, PackageContentCategory, PackageGroupEntry } from "./shared.js";
 import type { ResourceItem } from "../types.js";
 
 export function handleListInput(data: string, args: {
-	selectedItem?: ResourceItem;
+	selectedEntry?: BrowserListEntry;
 	maxVisible: number;
 	onOpenSettings: () => void;
 	onClose: () => void | Promise<void>;
@@ -19,6 +19,7 @@ export function handleListInput(data: string, args: {
 	onOpenSelectedItem: () => void;
 	onTogglePinned: (item: ResourceItem) => void;
 	onToggleItem: (item: ResourceItem) => void;
+	onToggleGroup?: (items: ResourceItem[], enabled: boolean, label: string) => void;
 	onAddResource?: () => void;
 	searchInput: Input;
 	onApplyFilter: () => void;
@@ -34,12 +35,19 @@ export function handleListInput(data: string, args: {
 	if (kb.matches(data, "tui.select.pageDown")) return args.onMoveSelection(args.maxVisible);
 	if (kb.matches(data, "tui.select.confirm")) return args.onOpenSelectedItem();
 	if (data === "P") {
-		if (args.selectedItem) args.onTogglePinned(args.selectedItem);
+		if (args.selectedEntry?.kind === "resource" || args.selectedEntry?.kind === "plugin-child") {
+			args.onTogglePinned(args.selectedEntry.item);
+		}
 		return;
 	}
 	if (data === "A") return void args.onAddResource?.();
 	if (data === " ") {
-		if (args.selectedItem) args.onToggleItem(args.selectedItem);
+		if (args.selectedEntry?.kind === "plugin-group") {
+			const enable = args.selectedEntry.enabledCount !== args.selectedEntry.totalCount;
+			args.onToggleGroup?.(args.selectedEntry.items, enable, args.selectedEntry.pluginName);
+		} else if (args.selectedEntry?.kind === "resource" || args.selectedEntry?.kind === "plugin-child") {
+			args.onToggleItem(args.selectedEntry.item);
+		}
 		return;
 	}
 	args.searchInput.handleInput(data);
