@@ -1,7 +1,7 @@
 # pi-resource-center
 
 [![npm version](https://img.shields.io/npm/v/pi-resource-center.svg)](https://www.npmjs.com/package/pi-resource-center)
-[![Version](https://img.shields.io/badge/version-0.2.3-blue.svg)](https://github.com/sodie2323/pi-resource-center/releases)
+[![Version](https://img.shields.io/badge/version-0.2.4-blue.svg)](https://github.com/sodie2323/pi-resource-center/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Pi Package](https://img.shields.io/badge/pi-package-purple.svg)](https://github.com/sodie2323/pi-resource-center)
 
@@ -62,6 +62,7 @@ It provides a keyboard-driven TUI resource browser, resource discovery across pr
 - Argument completions for `/resource` subcommands
 - Built-in settings UI (`Shift+S`) with persistent preferences
 - External skill source management for Claude, Codex, Codex Plugins, OpenCode, and multiple custom directories
+- Codex plugin skills can be grouped by plugin in the Skills browser for cleaner navigation
 - Inline integrations editing with keyboard shortcuts for add/remove and quick on/off toggling
 - Add view defaults scope from the current context and offers inline source suggestions for local paths, npm, git, and GitHub URLs
 - Add and update operations show a live status widget above the editor while work is in progress
@@ -346,7 +347,7 @@ By default, `extensions`, `skills`, and `prompts` focus on top-level resources. 
 
 From a package-contained extension, skill, or prompt detail view, you can explicitly show or hide that resource in its top-level category. Exposed package resources keep a package marker so their origin stays visible.
 
-Enabled external skill sources are synchronized into Pi core `settings.json` `skills` entries so Pi handles directory discovery and per-skill disable rules consistently. The Codex Plugins integration scans `~/.codex/plugins` recursively for `.codex-plugin/plugin.json` manifests and only syncs plugin skill directories from plugins that do not declare `apps`, because app-backed plugins may require Codex/OpenAI connector runtime that Pi cannot provide.
+Enabled external skill sources are synchronized into Pi core `settings.json` `skills` entries so Pi handles directory discovery and per-skill disable rules consistently. Codex-owned skills use normalized source labels such as `codex:skills` for the main Codex skills root and `codex:<plugin-name>` for Codex plugin skills. The Codex Plugins integration scans `~/.codex/plugins` recursively for `.codex-plugin/plugin.json` manifests and only syncs plugin skill directories from plugins that do not declare `apps`, because app-backed plugins may require Codex/OpenAI connector runtime that Pi cannot provide. When a Codex plugin contributes multiple skills, the Skills browser groups them under the plugin so they can be expanded or toggled together.
 
 Themes are the exception: package-provided themes are still surfaced in the `themes` category by default so they remain easy to discover and apply.
 

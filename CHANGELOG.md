@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.4] - 2026-04-25
+
+### Added
+- Added Codex Plugins external skills integration that discovers eligible plugin skill directories from `~/.codex/plugins`.
+- Added grouped Skills browser entries for Codex plugins that provide multiple skills, including expand/collapse and whole-group toggling.
+
+### Changed
+- Normalized Codex-derived source labels to `codex:skills` and `codex:<plugin-name>` for more consistent browser display.
+- Resolved skills imported from Codex plugin roots now retain plugin ownership metadata so browser grouping and source labeling stay accurate.
+
 ## [0.2.3] - 2026-04-20
 
 ### Changed
