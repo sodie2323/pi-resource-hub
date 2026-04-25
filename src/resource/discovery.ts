@@ -216,7 +216,7 @@ async function createFileItem(
 	const promptMetadata = category === "prompts" ? await readPromptMetadata(resource.path, caches) : undefined;
 	const pluginOwner = category === "skills" ? inferExternalPluginOwner(resource.path, externalPluginOwners) : undefined;
 	const sourceLabel = pluginOwner
-		? `Codex Plugins:${pluginOwner.externalPluginName}`
+		? `codex:${pluginOwner.externalPluginName}`
 		: (!packageSource ? inferConfiguredSourceLabel(resource.path, configuredSources) : undefined);
 	return {
 		category,
@@ -292,7 +292,7 @@ async function collectExternalPluginOwners(sources: ExternalSkillSourceSetting[]
 			owners.push({
 				externalSourceId: source.id,
 				externalPluginId: pluginRoot,
-				externalPluginName: plugin.displayName || plugin.name || basename(pluginRoot),
+				externalPluginName: (plugin.name || plugin.displayName || basename(pluginRoot)).toLowerCase(),
 				skillsRoot,
 			});
 		}
@@ -380,10 +380,11 @@ async function discoverCodexPluginSkills(cacheRoot: string, _sourceLabel: string
 		const pluginRoot = dirname(dirname(pluginJsonPath));
 		const skillsRoot = resolve(pluginRoot, plugin.skillsPath ?? "skills");
 		const pluginLabel = plugin.displayName || plugin.name || basename(pluginRoot);
+		const pluginSourceName = (plugin.name || plugin.displayName || basename(pluginRoot)).toLowerCase();
 		for (const path of await collectSkillPaths(skillsRoot)) {
 			skills.push({
 				path,
-				sourceLabel: `Codex Plugins:${pluginLabel}`,
+				sourceLabel: `codex:${pluginSourceName}`,
 				externalPluginId: pluginRoot,
 				externalPluginName: pluginLabel,
 				description: plugin.shortDescription || plugin.description
@@ -625,13 +626,18 @@ function inferConfiguredSourceLabel(path: string, configuredSources: ExternalSki
 	const normalizedPath = normalizeConfigPath(path).toLowerCase();
 	for (const source of configuredSources) {
 		const rootPath = normalizeConfigPath(resolveHomePath(source.path)).toLowerCase();
-		if (normalizedPath === rootPath || normalizedPath.startsWith(`${rootPath}/`)) return source.label;
+		if (normalizedPath === rootPath || normalizedPath.startsWith(`${rootPath}/`)) return formatExternalSourceLabel(source);
 	}
 	for (const source of DEFAULT_EXTERNAL_SKILL_SOURCES) {
 		const rootPath = normalizeConfigPath(resolveHomePath(source.path)).toLowerCase();
-		if (normalizedPath === rootPath || normalizedPath.startsWith(`${rootPath}/`)) return source.label;
+		if (normalizedPath === rootPath || normalizedPath.startsWith(`${rootPath}/`)) return formatExternalSourceLabel(source);
 	}
 	return undefined;
+}
+
+function formatExternalSourceLabel(source: ExternalSkillSourceSetting): string {
+	if (source.id === "codex") return "codex:skills";
+	return source.label;
 }
 
 function normalizeSource(metadata: PathMetadata): string {

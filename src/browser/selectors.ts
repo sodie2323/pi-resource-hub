@@ -154,7 +154,7 @@ export function buildBrowserListEntries(
 			pluginId,
 			pluginName,
 			scope: item.scope,
-			sourceLabel: "Codex Plugins",
+			sourceLabel: `codex:${pluginName}`,
 			items: pluginItems,
 			enabledCount: pluginItems.filter((entry) => entry.enabled).length,
 			totalCount: pluginItems.length,
