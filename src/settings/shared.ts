@@ -143,8 +143,8 @@ export function getPackageSources(settingsFile: SettingsFile | undefined): Packa
 	return settingsFile?.settings.packages ?? [];
 }
 
-export function getSelectedTheme(projectSettings: SettingsFile | undefined, userSettings: SettingsFile | undefined): string | undefined {
-	return projectSettings?.settings.theme ?? userSettings?.settings.theme;
+export function getSelectedTheme(projectSettings: SettingsFile | undefined, userSettings: SettingsFile | undefined, currentTheme?: string): string | undefined {
+	return projectSettings?.settings.theme ?? userSettings?.settings.theme ?? currentTheme;
 }
 
 export function isPackageSourceEnabled(source: PackageSource): boolean {

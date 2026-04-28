@@ -22,6 +22,7 @@ import {
 	resolveHomePath,
 	DEFAULT_EXTERNAL_SKILL_SOURCES,
 	syncPrunedExposedResources,
+	getSelectedTheme,
 	type ExternalSkillSourceSetting,
 	type PackageSource,
 	type SettingsFile,
@@ -56,7 +57,7 @@ type ExternalPluginOwner = {
 	skillsRoot: string;
 };
 
-export async function discoverResources(cwd: string): Promise<ResourceIndex> {
+export async function discoverResources(cwd: string, currentTheme?: string): Promise<ResourceIndex> {
 	const caches: DiscoveryCaches = {
 		mtimeByPath: new Map(),
 		packageDescriptionByPath: new Map(),
@@ -70,7 +71,11 @@ export async function discoverResources(cwd: string): Promise<ResourceIndex> {
 	const resolvedPaths = await packageManager.resolve();
 	const projectSettings = settingsManager.getProjectSettings();
 	const userSettings = settingsManager.getGlobalSettings();
-	const selectedTheme = projectSettings.theme ?? userSettings.theme;
+	const selectedTheme = getSelectedTheme(
+		{ path: "", dir: "", settings: projectSettings },
+		{ path: "", dir: "", settings: userSettings },
+		currentTheme,
+	);
 	const packageCounts = buildPackageCountMap(resolvedPaths);
 	const packageEnabledCounts = buildPackageEnabledSummaryMap(resolvedPaths, selectedTheme);
 	const packageDescriptions = await buildPackageDescriptionMap(resolvedPaths, caches);

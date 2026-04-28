@@ -24,7 +24,7 @@ import type { ResourceCategory, ResourceItem } from "../types.js";
 export async function openResourceBrowser(category: ResourceCategory, ctx: ExtensionCommandContext, pi: ExtensionAPI): Promise<void> {
 	const resourceCenterSettings = await readResourceCenterSettings();
 	await syncExternalSkillSourcesToPiSettings(resourceCenterSettings.externalSkillSources, resourceCenterSettings.externalSkillSources);
-	const resources = await discoverResources(ctx.cwd);
+	const resources = await discoverResources(ctx.cwd, ctx.ui.theme.name);
 	let currentResourceCenterSettings = resourceCenterSettings;
 	let hasPendingChanges = false;
 
@@ -35,7 +35,7 @@ export async function openResourceBrowser(category: ResourceCategory, ctx: Exten
 			if (browserOpen) tui.requestRender();
 		};
 		const refreshBrowser = async () => {
-			browser.setResources(await discoverResources(ctx.cwd));
+			browser.setResources(await discoverResources(ctx.cwd, ctx.ui.theme.name));
 			requestRender();
 		};
 		const operationStatus = new ResourceOperationStatusController(ctx.ui, theme, {
@@ -222,7 +222,7 @@ export async function openResourceBrowser(category: ResourceCategory, ctx: Exten
 				void saveResourceCenterSettings(settings)
 					.then(async () => {
 						if (externalSourcesChanged) await refreshBrowser();
-						const resources = await discoverResources(ctx.cwd);
+						const resources = await discoverResources(ctx.cwd, ctx.ui.theme.name);
 						await saveResourceCenterSettings(settings, resources);
 					})
 					.catch((error: unknown) => {

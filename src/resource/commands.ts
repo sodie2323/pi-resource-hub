@@ -78,7 +78,7 @@ export async function handleMutateCommand(
 		return;
 	}
 
-	const resources = await discoverResources(ctx.cwd);
+	const resources = await discoverResources(ctx.cwd, ctx.ui.theme.name);
 	const matches = findResources(resources, query, category);
 	if (matches.length === 0) {
 		ctx.ui.notify(`No resource found for "${query}"`, "warning");
@@ -155,7 +155,7 @@ export async function handleExposureCommand(
 		return;
 	}
 
-	const resources = await discoverResources(ctx.cwd);
+	const resources = await discoverResources(ctx.cwd, ctx.ui.theme.name);
 	const matches = findResources(resources, query, category);
 	if (matches.length === 0) {
 		ctx.ui.notify(`No resource found for "${query}"`, "warning");
